@@ -1,0 +1,13 @@
+# WhatsApp login session and secrets: never commit these
+.wa-profile/
+service_account.json
+*.json.key
+
+# Customer data and run output
+*.csv
+!tests/*.csv
+logs/
+
+__pycache__/
+.venv/
+.pytest_cache/
