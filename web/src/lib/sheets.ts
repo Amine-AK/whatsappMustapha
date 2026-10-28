@@ -107,9 +107,33 @@ export async function readRow(row: number): Promise<string[]> {
   return data.values?.[0] ?? [];
 }
 
+// Column titles for row 1, in the order code.gs uses (A..Q).
+const CUSTOMER_HEADER = [
+  "اسم الزبون", "رقم الهاتف", "السلع", "ثمن البيع", "ثمن الشراء", "الربح", "التسبيق / الدفعات",
+  "المتبقي", "مدة الطريطة", "تاريخ الدفعة المقبلة", "", "", "", "مبلغ الطريطة",
+  "تذكير واتساب", "تأكيد الصفقة", "طباعة",
+];
+
+let headerChecked = false;
+
+/** A new, empty sheet has no row 1: write the titles so customers start at row 2. */
+async function ensureHeader(title: string): Promise<void> {
+  if (headerChecked) return;
+  const data = await api<{ values?: string[][] }>(`/values/${encodeURIComponent(range(title, "A1:Q1"))}`);
+  if (!data.values?.[0]?.some((v) => String(v).trim())) {
+    await api(`/values/${encodeURIComponent(range(title, "A1:Q1"))}`, {
+      method: "PUT",
+      query: { valueInputOption: "RAW" },
+      body: { values: [CUSTOMER_HEADER] },
+    });
+  }
+  headerChecked = true;
+}
+
 /** Append a customer row; returns its row number. */
 export async function appendCustomerRow(values: (string | number)[]): Promise<number> {
   const tab = await mainTab();
+  await ensureHeader(tab.title);
   const data = await api<{ updates: { updatedRange: string } }>(
     `/values/${encodeURIComponent(range(tab.title, "A:N"))}:append`,
     {
@@ -121,6 +145,7 @@ export async function appendCustomerRow(values: (string | number)[]): Promise<nu
   const match = data.updates.updatedRange.match(/![A-Z]+(\d+)/);
   if (!match) throw new SheetsError(`Unexpected range ${data.updates.updatedRange}`, 500);
   const row = Number(match[1]);
+  if (row < 2) throw new SheetsError(`Customer was written to row ${row}, above the first customer row`, 500);
   await syncBackupRow(row);
   return row;
 }
