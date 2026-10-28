@@ -1,5 +1,9 @@
 # ELECTRO-LMESTOUR: WhatsApp debt reminders (Python + Playwright)
 
+> **New:** `web/` is a full app (Next.js, installable on Android and usable on
+> PC) to add, edit, delete and search customers, record payments and send WATI
+> reminders, all on the same Google Sheet. See [`web/README.md`](web/README.md).
+
 `code.gs` is the Google Apps Script that runs inside the customer Google Sheet.
 The `reminder/` folder is a Python tool that reads the same sheet, uses the **same
 rules** as the script to pick who must pay, and sends the WhatsApp messages
