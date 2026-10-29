@@ -69,17 +69,30 @@ last 24 hours with a **template approved by WhatsApp**.
 
 1. In WATI: **Broadcast > Your templates > New template message**.
    - Name: `debt_reminder_ar`, category **Utility**, language **Arabic**.
-   - Body (the `{{…}}` names must match exactly):
+   - Body. WATI fills `{{1}}`…`{{5}}` **in this order**: name, items, due
+     date, remaining amount, instalment.
 
      ```
-     السلام عليكم {{name}}، نذكركم من متجر ELECTRO-LMESTOUR بأن موعد الدفعة بخصوص ({{items}}) قد حل بتاريخ {{due_date}}.
-     ⏳ المبلغ المتبقي: {{remaining}} درهم
-     📌 الطريطة المتفق عليها: {{installment}}
+     السلام عليكم {{1}}، نذكركم من متجر ELECTRO-LMESTOUR بأن موعد الدفعة بخصوص ({{2}}) قد حل بتاريخ {{3}}.
+     ⏳ المبلغ المتبقي: {{4}} درهم
+     📌 الطريطة المتفق عليها: {{5}}
      المرجو التواصل معنا عبر رقمنا التجاري 0663336760 وشكراً.
      ```
-   - Submit it and wait for approval (usually minutes to a day).
-2. In WATI: **API Docs**. Copy the **API Endpoint** into `WATI_API_ENDPOINT` and
-   the **Access Token** into `WATI_ACCESS_TOKEN`.
+   - Submit it and wait until it shows **Approved**. WATI refuses templates
+     that are pending or rejected.
+2. Set these variables:
+   - `WATI_API_ENDPOINT`: `https://live-mt-server.wati.io/<tenant ID>`. The
+     tenant ID is the number in the WATI dashboard address
+     (`live.wati.io/10281911/…` gives `10281911`).
+   - `WATI_ACCESS_TOKEN`: a WATI API key (`wati_…`) with at least one of the
+     permissions `api`, `wati_integration:write` or `messagetemplate:write`.
+   - `WATI_CHANNEL_NUMBER`: the shop's WhatsApp number connected in WATI, without
+     `+` (e.g. `212658869574`).
+   - `WATI_TEMPLATE_NAME`: the template's exact name.
+
+The app uses WATI's `POST /{tenantId}/api/v1/sendTemplateMessage`. WATI answering
+"sent" means it accepted the message; delivery happens a few seconds later.
+WATI refuses messages when the trial's broadcast quota is used up.
 
 The reminder button lists every customer whose payment date has passed and who
 still owes money. You can untick anyone, then confirm. Customers with a bad

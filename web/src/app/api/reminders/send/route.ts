@@ -17,7 +17,7 @@ type Result = { row: number; status: "sent" | "failed" | "skipped"; detail: stri
 
 /** Sends up to 10 reminders; the app calls it in batches and shows progress. */
 export async function POST(request: Request) {
-  if (!watiConfigured()) return jsonError("WATI ماشي مضبوط. زيد WATI_API_ENDPOINT و WATI_ACCESS_TOKEN و WATI_TEMPLATE_NAME.", 503);
+  if (!watiConfigured()) return jsonError("WATI ماشي مضبوط. زيد WATI_API_ENDPOINT و WATI_ACCESS_TOKEN و WATI_TEMPLATE_NAME و WATI_CHANNEL_NUMBER.", 503);
   const body = await readJson<SendBody>(request);
   if (body instanceof Response) return body;
   const targets = Array.isArray(body.targets) ? body.targets.slice(0, MAX_PER_REQUEST) : [];

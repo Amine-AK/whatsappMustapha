@@ -27,8 +27,10 @@ export const env = {
   watiToken: () => (process.env.WATI_ACCESS_TOKEN || "").replace(/^Bearer\s+/i, ""),
   watiTemplate: () => process.env.WATI_TEMPLATE_NAME || "",
   watiBroadcast: () => process.env.WATI_BROADCAST_NAME || "debt_reminder",
+  // The shop's WhatsApp number in WATI, e.g. 212658869574 (required by WATI's API).
+  watiChannelNumber: () => (process.env.WATI_CHANNEL_NUMBER || "").replace(/\D/g, ""),
 };
 
 export function watiConfigured(): boolean {
-  return Boolean(env.watiEndpoint() && env.watiToken() && env.watiTemplate());
+  return Boolean(env.watiEndpoint() && env.watiToken() && env.watiTemplate() && env.watiChannelNumber());
 }

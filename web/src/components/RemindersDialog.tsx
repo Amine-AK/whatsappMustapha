@@ -111,7 +111,7 @@ export function RemindersDialog({ onClose }: { onClose: () => void }) {
 
       {data && !data.watiConfigured && (
         <p className="alert warn" role="alert">
-          WATI ماشي مضبوط فالسيرفر. زيد WATI_API_ENDPOINT و WATI_ACCESS_TOKEN و WATI_TEMPLATE_NAME (شوف README).
+          WATI ماشي مضبوط فالسيرفر. زيد WATI_API_ENDPOINT و WATI_ACCESS_TOKEN و WATI_TEMPLATE_NAME و WATI_CHANNEL_NUMBER (شوف README).
         </p>
       )}
 
