@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import { RegisterServiceWorker } from "@/components/RegisterServiceWorker";
+import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const plex = IBM_Plex_Sans_Arabic({
@@ -37,8 +38,10 @@ const CATCH_INSTALL_PROMPT = `window.addEventListener("beforeinstallprompt",func
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl" className={plex.variable}>
+    // suppressHydrationWarning: THEME_SCRIPT may set data-theme on <html> before React loads.
+    <html lang="ar" dir="rtl" className={plex.variable} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: CATCH_INSTALL_PROMPT }} />
       </head>
       <body>

@@ -16,6 +16,7 @@ import { ReceiptDialog } from "./ReceiptDialog";
 import { RemindersDialog } from "./RemindersDialog";
 import { SetupScreen } from "./SetupScreen";
 import { SyncBar } from "./SyncBar";
+import { ThemeButton } from "./ThemeButton";
 import { useLedger } from "./useLedger";
 import { Confirm } from "./ui";
 
@@ -148,6 +149,7 @@ export function Dashboard() {
         </div>
         <div className="topbar-actions">
           <InstallButton />
+          <ThemeButton />
           <button type="button" className="btn ghost" onClick={() => void data.refresh()} disabled={!online || data.syncing} aria-label="حدّث من الـ Google Sheet">
             {data.syncing ? "…" : "↻"}
           </button>
