@@ -494,6 +494,8 @@ input[type="date"] { min-height: 44px; }
 a.btn { text-decoration: none; }
 .wa-preview { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
 .wa-preview summary { cursor: pointer; color: var(--whatsapp); font-weight: 500; }
+.wa-preview .btn { margin-top: 8px; }
+.wa-preview p { margin: 6px 0 0; }
 .wa-preview pre {
   margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
   font-family: var(--font); font-size: 14px; line-height: 1.6;
