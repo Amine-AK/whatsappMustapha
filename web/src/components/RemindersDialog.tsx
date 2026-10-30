@@ -3,11 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/client";
 import { dueText, money } from "@/lib/format";
-import type { Customer } from "@/lib/sheet-logic";
+import type { DueStatus } from "@/lib/sheet-logic";
 import { Modal } from "./Modal";
 
 interface Item {
-  customer: Customer;
+  id: string;
+  name: string;
+  phone: string;
+  remaining: number;
+  dueDate: string;
+  status: DueStatus;
   blocker: string | null;
   sentToday: boolean;
 }
@@ -19,28 +24,28 @@ const BATCH = 10;
 export function RemindersDialog({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<{ today: string; watiConfigured: boolean; overdue: Item[] } | null>(null);
   const [loadError, setLoadError] = useState("");
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<"pick" | "confirm" | "sending" | "done">("pick");
-  const [outcomes, setOutcomes] = useState<Record<number, Outcome>>({});
+  const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
   const [sendError, setSendError] = useState("");
 
   useEffect(() => {
     apiFetch<{ today: string; watiConfigured: boolean; overdue: Item[] }>("/api/reminders")
       .then((d) => {
         setData(d);
-        setSelected(new Set(d.overdue.filter((i) => !i.blocker && !i.sentToday).map((i) => i.customer.row)));
+        setSelected(new Set(d.overdue.filter((i) => !i.blocker && !i.sentToday).map((i) => i.id)));
       })
       .catch((e) => setLoadError(e.message));
   }, []);
 
   const sendable = useMemo(() => data?.overdue.filter((i) => !i.blocker) ?? [], [data]);
-  const chosen = sendable.filter((i) => selected.has(i.customer.row));
+  const chosen = sendable.filter((i) => selected.has(i.id));
   const counts = Object.values(outcomes).reduce(
     (acc, o) => ({ ...acc, [o.status]: acc[o.status] + 1 }),
     { sent: 0, failed: 0, skipped: 0 },
   );
 
-  function toggle(row: number) {
+  function toggle(row: string) {
     setSelected((s) => {
       const next = new Set(s);
       if (next.has(row)) next.delete(row);
@@ -52,14 +57,14 @@ export function RemindersDialog({ onClose }: { onClose: () => void }) {
   async function send() {
     setStep("sending");
     setSendError("");
-    const queue = chosen.map((i) => ({ row: i.customer.row, expected: i.customer.expected }));
+    const queue = chosen.map((i) => i.id);
     for (let i = 0; i < queue.length; i += BATCH) {
       try {
-        const { results } = await apiFetch<{ results: ({ row: number } & Outcome)[] }>("/api/reminders/send", {
+        const { results } = await apiFetch<{ results: ({ id: string } & Outcome)[] }>("/api/reminders/send", {
           method: "POST",
-          body: { targets: queue.slice(i, i + BATCH) },
+          body: { ids: queue.slice(i, i + BATCH) },
         });
-        setOutcomes((o) => ({ ...o, ...Object.fromEntries(results.map((r) => [r.row, { status: r.status, detail: r.detail }])) }));
+        setOutcomes((o) => ({ ...o, ...Object.fromEntries(results.map((r) => [r.id, { status: r.status, detail: r.detail }])) }));
       } catch (e) {
         setSendError(e instanceof Error ? e.message : String(e));
         break;
@@ -139,16 +144,17 @@ export function RemindersDialog({ onClose }: { onClose: () => void }) {
 
       {data && data.overdue.length > 0 && (
         <ul className="pick-list">
-          {data.overdue.map(({ customer: c, blocker, sentToday }) => {
-            const outcome = outcomes[c.row];
+          {data.overdue.map((c) => {
+            const { blocker, sentToday } = c;
+            const outcome = outcomes[c.id];
             return (
-              <li key={c.row} className={blocker ? "disabled" : ""}>
+              <li key={c.id} className={blocker ? "disabled" : ""}>
                 <label>
                   <input
                     type="checkbox"
-                    checked={selected.has(c.row) && !blocker}
+                    checked={selected.has(c.id) && !blocker}
                     disabled={Boolean(blocker) || step !== "pick"}
-                    onChange={() => toggle(c.row)}
+                    onChange={() => toggle(c.id)}
                   />
                   <span className="pick-main">
                     <strong>{c.name}</strong>

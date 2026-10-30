@@ -1,4 +1,4 @@
-import { addDays, type DueStatus } from "./sheet-logic";
+import { addDays, formatMoroccoPhone, type DueStatus } from "./sheet-logic";
 
 const number = new Intl.NumberFormat("fr-MA", { maximumFractionDigits: 2 });
 
@@ -34,4 +34,13 @@ export function dueText(dueDate: string, status: DueStatus, today: string): stri
 export function searchDigits(q: string): string {
   const d = q.replace(/\D/g, "");
   return d.startsWith("0") ? "212" + d.slice(1) : d;
+}
+
+/** Does a customer match the search box? Name (any part) or phone in any format ("0661…", "+212 661…"). */
+export function matchesClient(name: string, phone: string, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (name.toLowerCase().includes(q)) return true;
+  const digits = searchDigits(q);
+  return digits.length >= 3 && formatMoroccoPhone(phone).includes(digits);
 }

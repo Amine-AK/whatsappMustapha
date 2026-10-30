@@ -1,13 +1,25 @@
-# ELECTRO-LMESTOUR: WhatsApp debt reminders (Python + Playwright)
+# ELECTRO-LMESTOUR
 
-> **New:** `web/` is a full app (Next.js, installable on Android and usable on
-> PC) to add, edit, delete and search customers, record payments and send WATI
-> reminders, all on the same Google Sheet. See [`web/README.md`](web/README.md).
+**The app is in [`web/`](web/README.md)**: a Next.js app, installable on Android
+and usable on PC, that keeps each customer's purchases, payments and instalment
+in separate Google Sheet tabs, works offline, prints thermal receipts and sends
+WATI reminders. Start there.
 
-`code.gs` is the Google Apps Script that runs inside the customer Google Sheet.
-The `reminder/` folder is a Python tool that reads the same sheet, uses the **same
-rules** as the script to pick who must pay, and sends the WhatsApp messages
-through WhatsApp Web with Playwright, one by one, 60 seconds apart.
+> **Older tools in this repository (kept for reference, no longer matching the sheet):**
+> - `reminder/` (below): a Python + Playwright tool that sent reminders through
+>   WhatsApp Web. It reads the old one-row-per-customer `Feuille 1` layout and
+>   the old Apps Script (`code.gs`, now removed). The app replaces it.
+> - `db/`: a PostgreSQL design of the same data. Not used; the data stays in
+>   Google Sheets.
+
+---
+
+# Old tool: WhatsApp debt reminders (Python + Playwright)
+
+The `reminder/` folder is a Python tool that read the old `Feuille 1` layout,
+used the same rules as the old Apps Script to pick who must pay, and sent the
+WhatsApp messages through WhatsApp Web with Playwright, one by one, 60 seconds
+apart.
 
 ## Who gets a message
 

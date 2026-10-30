@@ -420,3 +420,72 @@ input[type="date"] { min-height: 44px; }
   #print-root .ticket { box-shadow: none; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------------------------------------------------------------- ledger screens */
+
+.card-open {
+  display: grid; gap: 10px; padding: 0; border: 0; background: none; text-align: start; color: inherit;
+  font: inherit; cursor: pointer; width: 100%;
+}
+.card-open:focus-visible { border-radius: 8px; }
+.card-actions.two { grid-template-columns: 1.3fr 1fr; }
+
+.archive-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-radius: 10px; background: var(--info-soft); color: var(--info); font-size: 14px;
+}
+
+.form-section { font-size: 15px; font-weight: 700; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.installment-hint { display: grid; gap: 10px; padding: 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px; }
+
+.picker { display: grid; gap: 6px; }
+.picker-current { font-size: 15px; }
+.picker input { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.picker-list { list-style: none; margin: 0; padding: 4px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 2px; max-height: 240px; overflow-y: auto; }
+.picker-list button {
+  width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: none; cursor: pointer; text-align: start;
+}
+.picker-list button:hover, .picker-list button[aria-selected="true"] { background: var(--accent-soft); }
+
+.detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.facts.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.installment-box {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px;
+}
+.installment-box > div { min-width: 0; display: grid; gap: 2px; }
+.detail-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 521px) { .detail-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.detail-section { display: grid; gap: 8px; }
+.detail-section h3 { font-size: 15px; }
+.rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rows li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center;
+  padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
+}
+.row-main { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.row-amount { font-size: 14px; font-weight: 500; white-space: nowrap; }
+.row-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.link-btn { border: 0; background: none; padding: 4px 0; color: var(--accent); font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-btn.danger-text { color: var(--danger); }
+.detail-footer { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.detail-footer:empty { display: none; }
+.plain-list { margin: 0; padding-inline-start: 18px; display: grid; gap: 4px; }
+
+.segmented.wide-seg { display: flex; }
+.segmented.wide-seg button { flex: 1; }
+.setup-card { width: min(480px, 100%); text-align: start; justify-items: stretch; }
+.setup-card h1, .setup-card .brand-mark { justify-self: center; text-align: center; }
+
+/* Statement (كشف الحساب) on the thermal ticket */
+.ticket-section { font-weight: 700; }
+.ticket-table { width: 100%; border-collapse: collapse; }
+.ticket-table td { padding: 0.6mm 0; vertical-align: top; }
+.ticket-table .t-date { white-space: nowrap; width: 1%; }
+/* The date cell is left-to-right; space the item cell next to it instead. */
+.ticket-table td + td { padding-inline-start: 2.5mm; }
+.ticket-table .t-num { text-align: left; white-space: nowrap; font-weight: 500; padding-inline-start: 2mm; }
+.t-sub { display: block; font-size: 0.85em; }

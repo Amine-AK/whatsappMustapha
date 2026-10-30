@@ -1,8 +1,10 @@
 import { handleError } from "@/lib/api";
 import { watiConfigured } from "@/lib/env";
-import { reminderBlocker, sentToday } from "@/lib/reminders";
-import { readCustomerRows, readReminderLog } from "@/lib/sheets";
-import { rowsToCustomers, todayISO } from "@/lib/sheet-logic";
+import { summarize } from "@/lib/ledger";
+import { reminderRow } from "@/lib/reminders";
+import { readReminderLog } from "@/lib/sheets";
+import { loadLedger } from "@/lib/store";
+import { todayISO } from "@/lib/sheet-logic";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +12,11 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const today = todayISO();
-    const [rows, log] = await Promise.all([readCustomerRows(), readReminderLog()]);
-    const overdue = rowsToCustomers(rows, today)
-      .filter((c) => c.status === "overdue")
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .map((c) => ({ customer: c, blocker: reminderBlocker(c), sentToday: sentToday(log, c, today) }));
+    const [ledger, log] = await Promise.all([loadLedger(), readReminderLog()]);
+    const overdue = summarize(ledger, today)
+      .filter((s) => s.status === "overdue")
+      .sort((a, b) => a.client.nextDueDate.localeCompare(b.client.nextDueDate))
+      .map((s) => reminderRow(s, log, today));
     return Response.json({ today, watiConfigured: watiConfigured(), overdue });
   } catch (e) {
     return handleError(e);

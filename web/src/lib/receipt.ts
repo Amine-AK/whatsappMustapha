@@ -1,6 +1,8 @@
-// Payment receipt (وصل الأداء) printed on a thermal printer.
+// Receipts printed on the thermal printer: one payment (وصل الأداء) or the
+// whole account (كشف الحساب).
 
-import { installmentLine, isManualPeriod, listPayments, type Customer } from "./sheet-logic";
+import { installmentLine } from "./sheet-logic";
+import { sortPayments, type ClientSummary, type Payment } from "./ledger";
 
 export const SHOP = {
   name: "ELECTRO-LMESTOUR",
@@ -8,54 +10,102 @@ export const SHOP = {
   thanks: "شكراً على ثقتكم",
 };
 
-export interface Receipt {
-  /** Same payment, same number: "261030-1432". */
+/** "30/10/2026 - 14:32" */
+export function displayDateTime(date: string, time?: string): string {
+  const [y, m, d] = date.split("-");
+  if (!y || !m || !d) return date;
+  return `${d}/${m}/${y}${time && time !== "00:00" ? ` - ${time}` : ""}`;
+}
+
+export function displayDate(date: string): string {
+  return displayDateTime(date);
+}
+
+export function installmentText(s: ClientSummary): string {
+  const c = s.client;
+  return c.installment > 0 ? installmentLine(String(c.installment), c.period) : "";
+}
+
+export interface PaymentReceipt {
   number: string;
-  /** "30/10/2026 - 14:32" */
   date: string;
-  /** "تسبيق" for the first payment, "دفعة 3" for the third… */
   label: string;
+  clientId: string;
   customer: string;
   phone: string;
-  items: string;
+  /** Item this payment was for, if chosen. */
+  item: string;
   amount: number;
+  /** Bought up to that day. */
   total: number;
-  /** Paid up to and including this payment. */
   paidToDate: number;
-  /** Left to pay after this payment. */
   remaining: number;
-  /** Only on the latest payment (older receipts don't know it). */
+  /** Only on the latest payment. */
   nextDueDate: string;
   installment: string;
 }
 
-function receiptNumber(stamp: string, index: number): string {
-  const m = stamp.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\D+(\d{1,2}):(\d{2}))?/);
-  if (!m) return `P${index + 1}`;
-  const [, d, mo, y, hh = "00", mm = "00"] = m;
-  return `${y.slice(-2)}${mo.padStart(2, "0")}${d.padStart(2, "0")}-${hh.padStart(2, "0")}${mm}`;
-}
-
-/** Receipt for one of the customer's payments (the latest by default). */
-export function buildReceipt(c: Customer, index?: number): Receipt | null {
-  const payments = listPayments(c.advance);
-  if (!payments.length) return null;
-  const i = index === undefined ? payments.length - 1 : Math.max(0, Math.min(index, payments.length - 1));
-  const paidToDate = payments.slice(0, i + 1).reduce((s, p) => s + p.amount, 0);
-  const latest = i === payments.length - 1;
-  const remaining = Math.max(0, c.sellTotal - paidToDate);
+/** Receipt for one payment, with the account as it was right after it. */
+export function paymentReceipt(s: ClientSummary, payment: Payment): PaymentReceipt {
+  const ordered = sortPayments(s.payments);
+  const index = ordered.findIndex((p) => p.id === payment.id);
+  const upTo = index === -1 ? [...ordered, payment] : ordered.slice(0, index + 1);
+  const paidToDate = upTo.reduce((sum, p) => sum + p.amount, 0);
+  const total = s.purchases.filter((p) => p.date <= payment.date).reduce((sum, p) => sum + p.price, 0);
+  const remaining = Math.max(0, Math.round((total - paidToDate) * 100) / 100);
+  const latest = index === ordered.length - 1 || index === -1;
   return {
-    number: receiptNumber(payments[i].stamp, i),
-    date: payments[i].stamp,
-    label: i === 0 ? "تسبيق" : `دفعة ${i + 1}`,
-    customer: c.name,
-    phone: c.phone,
-    items: c.itemsPlain,
-    amount: payments[i].amount,
-    total: c.sellTotal,
+    number: payment.id,
+    date: displayDateTime(payment.date, payment.time),
+    label: payment.kind === "تسبيق" ? "تسبيق" : "دفعة",
+    clientId: s.client.id,
+    customer: s.client.name,
+    phone: s.client.phone,
+    item: s.purchases.find((p) => p.id === payment.purchaseId)?.item ?? "",
+    amount: payment.amount,
+    total,
     paidToDate,
     remaining,
-    nextDueDate: latest && remaining > 0 ? c.dueDate : "",
-    installment: remaining > 0 && (c.installment || (c.period && !isManualPeriod(c.period))) ? installmentLine(c.installment, c.period) : "",
+    nextDueDate: latest && remaining > 0 ? s.client.nextDueDate : "",
+    installment: remaining > 0 ? installmentText(s) : "",
+  };
+}
+
+export interface Statement {
+  clientId: string;
+  customer: string;
+  phone: string;
+  printedAt: string;
+  items: { date: string; item: string; price: number; remaining: number }[];
+  payments: { date: string; amount: number; label: string }[];
+  /** How many older payments were left out (only the last ones are printed). */
+  hiddenPayments: number;
+  hiddenTotal: number;
+  total: number;
+  paid: number;
+  remaining: number;
+  installment: string;
+  nextDueDate: string;
+}
+
+/** The whole account. `lastPayments` limits how many payments are listed (0 = all). */
+export function statement(s: ClientSummary, printedAt: string, lastPayments = 0): Statement {
+  const ordered = sortPayments(s.payments);
+  const shown = lastPayments > 0 ? ordered.slice(-lastPayments) : ordered;
+  const hidden = ordered.slice(0, ordered.length - shown.length);
+  return {
+    clientId: s.client.id,
+    customer: s.client.name,
+    phone: s.client.phone,
+    printedAt,
+    items: s.items.map((i) => ({ date: displayDate(i.purchase.date), item: i.purchase.item, price: i.purchase.price, remaining: i.remaining })),
+    payments: shown.map((p) => ({ date: displayDate(p.date), amount: p.amount, label: p.kind === "تسبيق" ? "تسبيق" : "" })),
+    hiddenPayments: hidden.length,
+    hiddenTotal: hidden.reduce((sum, p) => sum + p.amount, 0),
+    total: s.total,
+    paid: s.paid,
+    remaining: Math.max(0, s.remaining),
+    installment: s.remaining > 0 ? installmentText(s) : "",
+    nextDueDate: s.remaining > 0 ? s.client.nextDueDate : "",
   };
 }

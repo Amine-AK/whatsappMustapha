@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { opDescription } from "@/lib/offline";
-import type { OfflineState } from "./useOfflineCustomers";
+import type { LedgerState } from "./useLedger";
 
 function timeOf(iso: string | null): string {
   if (!iso) return "";
@@ -16,7 +15,7 @@ function timeOf(iso: string | null): string {
 }
 
 /** Connection and sync state: offline, sending, waiting changes, refused changes. */
-export function SyncBar({ state }: { state: OfflineState }) {
+export function SyncBar({ state }: { state: LedgerState }) {
   const [open, setOpen] = useState(false);
   const { online, syncing, pendingCount, failed, lastSync, syncError } = state;
 
@@ -59,17 +58,23 @@ export function SyncBar({ state }: { state: OfflineState }) {
           </button>
           {open && (
             <ul>
-              {failed.map((op) => (
-                <li key={op.id}>
+              {failed.map((q) => (
+                <li key={q.op.opId}>
                   <div>
-                    <strong>{op.label}</strong> · {opDescription(op)}
-                    <p className="small">{op.error}</p>
+                    <strong>{q.label}</strong>
+                    <p className="small">{q.error}</p>
                   </div>
                   <div className="sync-failed-actions">
-                    <button type="button" className="btn small-btn" onClick={() => state.retry(op.id)} disabled={!online}>
-                      عاود
+                    <button
+                      type="button"
+                      className="btn small-btn"
+                      onClick={() => state.retry(q.op.opId)}
+                      disabled={!online}
+                      title="عاود صيفطو (التعديل غادي يتطبق على آخر نسخة فالورقة)"
+                    >
+                      طبقو
                     </button>
-                    <button type="button" className="btn small-btn danger-ghost" onClick={() => state.discard(op.id)}>
+                    <button type="button" className="btn small-btn danger-ghost" onClick={() => state.discard(q.op.opId)}>
                       تجاهل
                     </button>
                   </div>
