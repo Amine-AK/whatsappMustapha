@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/client";
-import { dueText, money } from "@/lib/format";
+import { dueText, matchesClient, money } from "@/lib/format";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { Modal } from "./Modal";
 
@@ -28,6 +28,7 @@ export function RemindersDialog({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<"pick" | "confirm" | "sending" | "done">("pick");
   const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
   const [sendError, setSendError] = useState("");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     apiFetch<{ today: string; watiConfigured: boolean; overdue: Item[] }>("/api/reminders")
@@ -40,6 +41,19 @@ export function RemindersDialog({ onClose }: { onClose: () => void }) {
 
   const sendable = useMemo(() => data?.overdue.filter((i) => !i.blocker) ?? [], [data]);
   const chosen = sendable.filter((i) => selected.has(i.id));
+  // The search only narrows the list; ticked customers stay ticked when hidden.
+  const shown = data?.overdue.filter((i) => matchesClient(i.name, i.phone, query)) ?? [];
+  const shownSendable = shown.filter((i) => !i.blocker);
+
+  /** Ticks every customer in view, except those already reminded today. */
+  function selectShown() {
+    setSelected((s) => new Set([...s, ...shownSendable.filter((i) => !i.sentToday).map((i) => i.id)]));
+  }
+
+  function clearShown() {
+    const hide = new Set(shown.map((i) => i.id));
+    setSelected((s) => new Set([...s].filter((id) => !hide.has(id))));
+  }
   const counts = Object.values(outcomes).reduce(
     (acc, o) => ({ ...acc, [o.status]: acc[o.status] + 1 }),
     { sent: 0, failed: 0, skipped: 0 },
@@ -142,9 +156,39 @@ export function RemindersDialog({ onClose }: { onClose: () => void }) {
         </p>
       )}
 
+      {data && data.overdue.length > 0 && step === "pick" && (
+        <>
+          <div className="search-row">
+            <label className="visually-hidden" htmlFor="reminder-search">
+              قلب على زبون
+            </label>
+            <input
+              id="reminder-search"
+              type="search"
+              className="search"
+              placeholder="قلب بالسمية ولا الهاتف…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <div className="pick-tools">
+            <span className="muted">
+              مختارين <strong>{chosen.length}</strong> من {sendable.length}
+            </span>
+            <button type="button" className="btn ghost" onClick={selectShown} disabled={!shownSendable.length}>
+              {query.trim() ? "اختار لي باينين" : "اختار الكل"}
+            </button>
+            <button type="button" className="btn ghost" onClick={clearShown} disabled={!shown.some((i) => selected.has(i.id))}>
+              {query.trim() ? "حيد لي باينين" : "حيد الكل"}
+            </button>
+          </div>
+          {shown.length === 0 && <p className="empty">حتى زبون متأخر ما كيطابق «{query.trim()}».</p>}
+        </>
+      )}
+
       {data && data.overdue.length > 0 && (
         <ul className="pick-list">
-          {data.overdue.map((c) => {
+          {(step === "pick" ? shown : chosen).map((c) => {
             const { blocker, sentToday } = c;
             const outcome = outcomes[c.id];
             return (
