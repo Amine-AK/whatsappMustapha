@@ -23,8 +23,8 @@ const op = <T extends object>(body: T, at = `2026-01-10T10:00:${String(++n).padS
   ({ ...body, opId: `O-TEST${n}`, at }) as unknown as LedgerOp;
 
 const client: Client = { id: "C-AAAA1111", name: "محمد صاحب سمير", phone: "0661234567", installment: 1000, period: "شهر", nextDueDate: "2026-02-10", notes: "", createdAt: T0, updatedAt: T0 };
-const fridge: Purchase = { id: "S-FRIDGE01", clientId: client.id, date: "2026-01-10", item: "ثلاجة", price: 6000, cost: 4800, notes: "", createdAt: T0, updatedAt: T0 };
-const washer: Purchase = { id: "S-WASHER01", clientId: client.id, date: "2026-04-15", item: "ماشينة الصابون", price: 2500, cost: 1900, notes: "", createdAt: T0, updatedAt: T0 };
+const fridge: Purchase = { id: "S-FRIDGE01", clientId: client.id, date: "2026-01-10", item: "ثلاجة", price: 6000, notes: "", createdAt: T0, updatedAt: T0 };
+const washer: Purchase = { id: "S-WASHER01", clientId: client.id, date: "2026-04-15", item: "ماشينة الصابون", price: 2500, notes: "", createdAt: T0, updatedAt: T0 };
 const pay = (id: string, date: string, amount: number, purchaseId = "", kind: Payment["kind"] = "دفعة"): Payment => ({
   id, clientId: client.id, purchaseId, date, time: "10:00", amount, kind, notes: "", createdAt: `${date}T10:00:00Z`, updatedAt: T0,
 });
@@ -147,6 +147,19 @@ describe("receipts", () => {
     expect(r).toMatchObject({ number: "P-PAY00002", date: "10/02/2026 - 10:00", amount: 1000, total: 6000, paidToDate: 3000, remaining: 3000, nextDueDate: "" });
     const last = paymentReceipt(s, s.payments.find((p) => p.id === "P-PAY00005")!);
     expect(last).toMatchObject({ item: "ماشينة الصابون", label: "تسبيق", total: 8500, paidToDate: 6500, remaining: 2000, nextDueDate: "2026-05-10" });
+    // Every item not fully paid yet, with what is left on it.
+    expect(last.unpaid).toEqual([
+      { date: "10/01/2026", item: "ثلاجة", price: 6000, remaining: 1000 },
+      { date: "15/04/2026", item: "ماشينة الصابون", price: 2500, remaining: 1000 },
+    ]);
+    // An older receipt shows the items as they were that day (the washer wasn't bought yet).
+    expect(r.unpaid).toEqual([{ date: "10/01/2026", item: "ثلاجة", price: 6000, remaining: 3000 }]);
+  });
+
+  it("lists nothing left to pay once everything is paid", () => {
+    const l = applyOp(example(), op({ type: "payment.add", payment: pay("P-PAY00007", "2026-05-10", 2000) })).ledger;
+    const s = summarizeClient(l, client, "2026-05-10");
+    expect(paymentReceipt(s, s.payments.find((p) => p.id === "P-PAY00007")!).unpaid).toEqual([]);
   });
 
   it("prints the whole account, optionally only the last payments", () => {
@@ -196,11 +209,13 @@ describe("migration from Feuille 1", () => {
       ["Ahmed", 800, "2026-11-05", ""],
       ["Karim", 0, "", "الطريطة: حسب الاتفاق"],
     ]);
-    expect(l.purchases.map((p) => [p.item, p.date, p.price, p.cost])).toEqual([
-      ["TV", "2026-03-01", 4500, 3500],
-      ["Frigo", "2026-06-05", 6000, 4800],
-      ["Four", expect.any(String), 1000, 0],
+    expect(l.purchases.map((p) => [p.item, p.date, p.price])).toEqual([
+      ["TV", "2026-03-01", 4500],
+      ["Frigo", "2026-06-05", 6000],
+      ["Four", expect.any(String), 1000],
     ]);
+    // The old buying price (column E) is not carried over.
+    expect(l.purchases.every((p) => !("cost" in p))).toBe(true);
     expect(l.payments.map((p) => [p.date, p.time, p.amount, p.kind, p.purchaseId === l.purchases[0].id])).toEqual([
       ["2026-03-01", "10:00", 1000, "تسبيق", true],
       ["2026-04-01", "18:05", 500, "دفعة", false],

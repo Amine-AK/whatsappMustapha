@@ -33,7 +33,7 @@ export const HEADERS: Record<TableKey, string[]> = {
     "رقم الزبون", "الاسم", "الهاتف", "الطريطة", "المدة", "الدفعة المقبلة", "ملاحظات",
     "مجموع المشتريات", "مجموع المدفوع", "المتبقي", "آخر دفعة", "تاريخ الإضافة", "آخر تعديل",
   ],
-  purchases: ["رقم العملية", "رقم الزبون", "الزبون", "التاريخ", "السلعة", "ثمن البيع", "ثمن الشراء", "ملاحظات", "تاريخ الإضافة", "آخر تعديل"],
+  purchases: ["رقم العملية", "رقم الزبون", "الزبون", "التاريخ", "السلعة", "ثمن البيع", "ملاحظات", "تاريخ الإضافة", "آخر تعديل"],
   payments: [
     "رقم الوصل", "رقم الزبون", "الزبون", "التاريخ", "الساعة", "المبلغ", "النوع", "رقم السلعة", "السلعة", "ملاحظات", "تاريخ الإضافة", "آخر تعديل",
   ],
@@ -76,7 +76,7 @@ export function rowToClient(r: unknown[]): Client | null {
 export function rowToPurchase(r: unknown[]): Purchase | null {
   const id = s(r[0]);
   if (!id) return null;
-  return { id, clientId: s(r[1]), date: d(r[3]), item: s(r[4]), price: n(r[5]), cost: n(r[6]), notes: s(r[7]), createdAt: s(r[8]), updatedAt: s(r[9]) };
+  return { id, clientId: s(r[1]), date: d(r[3]), item: s(r[4]), price: n(r[5]), notes: s(r[6]), createdAt: s(r[7]), updatedAt: s(r[8]) };
 }
 
 export function rowToPayment(r: unknown[]): Payment | null {
@@ -142,7 +142,7 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
   const purchases = new Map<string, Cell[]>(
     ledger.purchases.map((p) => [
       p.id,
-      [p.id, p.clientId, names.get(p.clientId) ?? "", p.date, p.item, p.price, money(p.cost), p.notes, p.createdAt, p.updatedAt],
+      [p.id, p.clientId, names.get(p.clientId) ?? "", p.date, p.item, p.price, p.notes, p.createdAt, p.updatedAt],
     ]),
   );
   const payments = new Map<string, Cell[]>(
@@ -227,9 +227,7 @@ export function migrateOldRows(rows: unknown[][], now = new Date()): Ledger {
     // Purchases: one per "+" part of column C, prices from column D in the same order.
     const itemParts = parts(itemsText);
     const prices = parts(cell(COL.sell)).map(parseSum);
-    const costs = parts(cell(COL.buy)).map(parseSum);
     const totalPrice = parseSum(cell(COL.sell));
-    const totalCost = parseSum(cell(COL.buy));
     const sameCount = prices.length === itemParts.length && itemParts.length > 0;
     const firstDate = itemParts.map(stampOf).find(Boolean)?.date ?? today;
     const purchases: Purchase[] = [];
@@ -241,7 +239,6 @@ export function migrateOldRows(rows: unknown[][], now = new Date()): Ledger {
           date: stampOf(part)?.date ?? firstDate,
           item: stripStamps(part) || "سلعة",
           price: prices[i],
-          cost: costs.length === itemParts.length ? costs[i] : i === 0 ? totalCost : 0,
           notes: "",
           createdAt,
           updatedAt: createdAt,
@@ -255,7 +252,6 @@ export function migrateOldRows(rows: unknown[][], now = new Date()): Ledger {
         date: firstDate,
         item: stripStamps(itemsText) || "سلعة",
         price: totalPrice || 0,
-        cost: totalCost,
         notes: sameCount ? "" : `من الورقة القديمة: ${cell(COL.sell)}`,
         createdAt,
         updatedAt: createdAt,

@@ -187,6 +187,28 @@ function PaymentBody({ r }: { r: PaymentReceipt }) {
         <span>{r.label}</span>
         <strong>{money(r.amount)}</strong>
       </div>
+      {r.unpaid.length > 0 && (
+        <>
+          <hr />
+          <p className="ticket-section">السلع لي باقي ما تخلصاتش</p>
+          <table className="ticket-table">
+            <tbody>
+              {r.unpaid.map((i, k) => (
+                <tr key={k}>
+                  <td dir="ltr" className="t-date">
+                    {i.date}
+                  </td>
+                  <td>
+                    {i.item}
+                    <span className="t-sub">الثمن {money(i.price)}</span>
+                  </td>
+                  <td className="t-num">باقي {money(i.remaining)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </>
   );
 }

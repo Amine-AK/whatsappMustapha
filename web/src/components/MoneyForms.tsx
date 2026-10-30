@@ -69,7 +69,6 @@ export function PurchaseForm({
   const [v, setV] = useState({
     item: purchase?.item ?? "",
     price: purchase ? String(purchase.price) : "",
-    cost: purchase?.cost ? String(purchase.cost) : "",
     date: purchase?.date ?? today,
     notes: purchase?.notes ?? "",
     advance: "",
@@ -97,7 +96,6 @@ export function PurchaseForm({
     const err: Errors = {};
     if (!v.item.trim()) err.item = "السلعة ضرورية";
     if (!(price > 0)) err.price = "ثمن البيع ضروري";
-    if (v.cost && !(parseAmount(v.cost) >= 0)) err.cost = "المبلغ غير صحيح";
     if (!isISODate(v.date)) err.date = "التاريخ ضروري";
     if (v.advance && !(advance >= 0)) err.advance = "المبلغ غير صحيح";
     if (advance > price) err.advance = "التسبيق كبر من الثمن";
@@ -113,7 +111,6 @@ export function PurchaseForm({
         ["السلعة", purchase.item, v.item.trim()],
         ["التاريخ", purchase.date, v.date],
         ["ثمن البيع", purchase.price, price],
-        ["ثمن الشراء", purchase.cost || "", parseAmount(v.cost || "0") || ""],
         ["ملاحظات", purchase.notes, v.notes.trim()],
       ])
     : [];
@@ -125,7 +122,7 @@ export function PurchaseForm({
         type: "purchase.update",
         id: purchase.id,
         base: purchase.updatedAt,
-        patch: { item: v.item.trim(), date: v.date, price, cost: parseAmount(v.cost || "0") || 0, notes: v.notes.trim() },
+        patch: { item: v.item.trim(), date: v.date, price, notes: v.notes.trim() },
       });
       return onClose();
     }
@@ -135,7 +132,6 @@ export function PurchaseForm({
       date: v.date,
       item: v.item.trim(),
       price,
-      cost: parseAmount(v.cost || "0") || 0,
       notes: v.notes.trim(),
       createdAt: at,
       updatedAt: at,
@@ -198,9 +194,6 @@ export function PurchaseForm({
         </Field>
         <Field id="pu-price" label="ثمن البيع" error={errors.price} hint="درهم">
           <input id="pu-price" inputMode="decimal" dir="ltr" value={v.price} onChange={(e) => set("price")(e.target.value)} />
-        </Field>
-        <Field id="pu-cost" label="ثمن الشراء" error={errors.cost}>
-          <input id="pu-cost" inputMode="decimal" dir="ltr" value={v.cost} onChange={(e) => set("cost")(e.target.value)} />
         </Field>
         <Field id="pu-date" label="التاريخ" error={errors.date}>
           <input id="pu-date" type="date" value={v.date} max={today} onChange={(e) => set("date")(e.target.value)} />

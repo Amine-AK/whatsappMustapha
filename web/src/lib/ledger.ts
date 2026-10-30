@@ -31,8 +31,6 @@ export interface Purchase {
   date: string;
   item: string;
   price: number;
-  /** Buying price, 0 = unknown. */
-  cost: number;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -101,7 +99,7 @@ type OpBody =
   | { type: "client.delete"; id: string }
   | { type: "client.installment"; id: string; base: string; change: InstallmentChange; nextDueDate?: string }
   | { type: "purchase.add"; purchase: Purchase }
-  | { type: "purchase.update"; id: string; base: string; patch: Partial<Pick<Purchase, "date" | "item" | "price" | "cost" | "notes">> }
+  | { type: "purchase.update"; id: string; base: string; patch: Partial<Pick<Purchase, "date" | "item" | "price" | "notes">> }
   | { type: "purchase.delete"; id: string }
   | { type: "payment.add"; payment: Payment; nextDueDate?: string }
   | {
@@ -151,7 +149,6 @@ function checkPurchase(p: Purchase): string | null {
   if (!isLedgerId(p.id) || !p.id.startsWith("S-") || !isLedgerId(p.clientId)) return "رقم العملية غير صحيح";
   if (!text(p.item, 300) || !p.item.trim()) return "السلعة ضرورية";
   if (!money(p.price) || p.price <= 0) return "ثمن البيع غير صحيح";
-  if (!money(p.cost)) return "ثمن الشراء غير صحيح";
   if (!date(p.date) || !p.date || !text(p.createdAt, 40)) return "التاريخ غير صحيح";
   if (!text(p.notes, 1000)) return "الملاحظة طويلة بزاف";
   return null;
@@ -247,7 +244,7 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       if (!p) return invalid(ledger, "هاد السلعة ما بقاتش");
       if (p.updatedAt === op.at) return { ledger, result: "already" };
       if (p.updatedAt !== op.base) return { ledger, result: "conflict", message: CONFLICT };
-      const next = { ...p, ...pick<Purchase>(op.patch, ["date", "item", "price", "cost", "notes"]), updatedAt: op.at };
+      const next = { ...p, ...pick<Purchase>(op.patch, ["date", "item", "price", "notes"]), updatedAt: op.at };
       const err = checkPurchase(next);
       if (err) return invalid(ledger, err);
       return { ledger: { ...ledger, purchases: replace(ledger.purchases, p.id, next) }, result: "ok" };
@@ -316,7 +313,6 @@ export interface ClientSummary {
   purchases: Purchase[];
   payments: Payment[];
   total: number;
-  cost: number;
   paid: number;
   remaining: number;
   lastPaymentDate: string;
@@ -376,7 +372,6 @@ export function summarizeClient(ledger: Ledger, clientOrId: Client, today: strin
     purchases,
     payments,
     total,
-    cost: round(purchases.reduce((s, p) => s + p.cost, 0)),
     paid,
     remaining,
     lastPaymentDate,

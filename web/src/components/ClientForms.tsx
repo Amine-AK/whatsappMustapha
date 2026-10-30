@@ -46,7 +46,6 @@ export function NewClientForm({
     notes: "",
     item: "",
     price: "",
-    cost: "",
     date: today,
     advance: "",
     installment: "",
@@ -77,7 +76,6 @@ export function NewClientForm({
     if (phoneError(v.phone)) err.phone = phoneError(v.phone);
     if (v.item.trim() && !(price > 0)) err.price = "ثمن البيع ضروري";
     if (!v.item.trim() && v.price) err.item = "السلعة ضرورية";
-    if (v.cost && !(parseAmount(v.cost) >= 0)) err.cost = "المبلغ غير صحيح";
     if (v.advance && !(advance >= 0)) err.advance = "المبلغ غير صحيح";
     if (advance > price) err.advance = "التسبيق كبر من الثمن";
     if (v.installment && !(parseAmount(v.installment) >= 0)) err.installment = "المبلغ غير صحيح";
@@ -107,7 +105,6 @@ export function NewClientForm({
         date: v.date,
         item: v.item.trim(),
         price,
-        cost: parseAmount(v.cost || "0") || 0,
         notes: "",
         createdAt: at,
         updatedAt: at,
@@ -166,9 +163,6 @@ export function NewClientForm({
         </Field>
         <Field id="n-price" label="ثمن البيع" error={errors.price} hint="درهم">
           <input id="n-price" inputMode="decimal" dir="ltr" value={v.price} onChange={(e) => set("price")(e.target.value)} />
-        </Field>
-        <Field id="n-cost" label="ثمن الشراء" error={errors.cost} hint="باش يتحسب الربح">
-          <input id="n-cost" inputMode="decimal" dir="ltr" value={v.cost} onChange={(e) => set("cost")(e.target.value)} />
         </Field>
         <Field id="n-advance" label="التسبيق" error={errors.advance} hint="شحال خلص دابا">
           <input id="n-advance" inputMode="decimal" dir="ltr" value={v.advance} onChange={(e) => set("advance")(e.target.value)} />
