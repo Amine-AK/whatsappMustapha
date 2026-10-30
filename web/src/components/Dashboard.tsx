@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/client";
 import { dueText, money, searchDigits, STATUS_LABEL } from "@/lib/format";
-import type { Customer, DueStatus } from "@/lib/sheet-logic";
+import type { LocalCustomer } from "@/lib/offline";
+import type { DueStatus } from "@/lib/sheet-logic";
 import { CustomerForm } from "./CustomerForm";
 import { Modal } from "./Modal";
 import { PaymentDialog } from "./PaymentDialog";
 import { RemindersDialog } from "./RemindersDialog";
+import { SyncBar } from "./SyncBar";
+import { useOfflineCustomers } from "./useOfflineCustomers";
+
+type Customer = LocalCustomer;
 
 type Sort = "due" | "debt-desc" | "debt-asc" | "name";
 type StatusFilter = "all" | "owing" | DueStatus;
@@ -43,33 +48,13 @@ type Dialog =
   | null;
 
 export function Dashboard() {
-  const [customers, setCustomers] = useState<Customer[] | null>(null);
-  const [today, setToday] = useState("");
-  const [loadError, setLoadError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const data = useOfflineCustomers();
+  const { customers, today, loadError, online } = data;
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [toast, setToast] = useState("");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const data = await apiFetch<{ customers: Customer[]; today: string }>("/api/customers");
-      setCustomers(data.customers);
-      setToday(data.today);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   useEffect(() => {
     if (!toast) return;
@@ -122,20 +107,20 @@ export function Dashboard() {
   const activeFilterCount =
     Number(Boolean(filters.from)) + Number(Boolean(filters.to)) + Number(Boolean(filters.minDebt)) + Number(Boolean(filters.maxDebt));
 
-  function replaceCustomer(updated: Customer) {
-    setCustomers((list) => {
-      if (!list) return [updated];
-      const i = list.findIndex((c) => c.row === updated.row);
-      return i === -1 ? [...list, updated] : list.map((c) => (c.row === updated.row ? updated : c));
-    });
-  }
+  // Saved on the device first; this says whether it already reached the sheet.
+  const savedNote = online ? "" : " (فالتيليفون، غادي يتزامن ملي ترجع الأنترنيت)";
+
+  // Reminders read the sheet: they need the internet and every change already sent.
+  const reminderBlocked = !online
+    ? "التذكير خاصو الأنترنيت"
+    : data.pendingCount > 0 || data.syncing
+      ? "تسنى حتى تتزامن التعديلات"
+      : "";
 
   async function confirmDelete(c: Customer) {
-    await apiFetch(`/api/customers/${c.row}`, { method: "DELETE", body: { expected: c.expected } });
+    await data.remove(c);
     setDialog(null);
-    setToast(`تمسح ${c.name}`);
-    // Rows below the deleted one move up, so reload row numbers from the sheet.
-    await load();
+    setToast(`تمسح ${c.name}${savedNote}`);
   }
 
   return (
@@ -151,14 +136,23 @@ export function Dashboard() {
           </div>
         </div>
         <div className="topbar-actions">
-          <button type="button" className="btn ghost" onClick={() => void load()} disabled={loading} aria-label="حدّث">
-            {loading ? "…" : "↻"}
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => void data.refresh()}
+            disabled={!online || data.syncing}
+            aria-label="حدّث من الـ Google Sheet"
+          >
+            {data.syncing ? "…" : "↻"}
           </button>
           <button
             type="button"
             className="btn ghost"
+            disabled={!online}
+            title={online ? undefined : "الخروج خاصو الأنترنيت"}
             onClick={async () => {
-              await apiFetch("/api/logout", { method: "POST" });
+              if (data.pendingCount > 0 && !window.confirm("مازال كاين تعديلات ما تزامنوش. غادي يبقاو فالتيليفون ويتزامنو ملي تدخل من جديد. نخرج؟")) return;
+              await apiFetch("/api/logout", { method: "POST" }).catch(() => {});
               window.location.href = "/login";
             }}
           >
@@ -168,6 +162,8 @@ export function Dashboard() {
       </header>
 
       <main className="content">
+        <SyncBar state={data} />
+
         <section className="summary" aria-label="ملخص">
           <div className="stat">
             <span className="stat-label">مجموع الكريدي</span>
@@ -190,11 +186,22 @@ export function Dashboard() {
           <button type="button" className="btn primary" onClick={() => setDialog({ kind: "add" })}>
             + زبون جديد
           </button>
-          <button type="button" className="btn whatsapp" onClick={() => setDialog({ kind: "remind" })}>
+          <button
+            type="button"
+            className="btn whatsapp"
+            onClick={() => setDialog({ kind: "remind" })}
+            disabled={Boolean(reminderBlocked)}
+            aria-describedby={reminderBlocked ? "remind-why" : undefined}
+          >
             تذكير المتأخرين
             {summary.overdue > 0 && <span className="badge">{summary.overdue}</span>}
           </button>
         </div>
+        {reminderBlocked && (
+          <p id="remind-why" className="muted small">
+            {reminderBlocked}
+          </p>
+        )}
 
         <div className="search-row">
           <label className="visually-hidden" htmlFor="search">
@@ -279,7 +286,7 @@ export function Dashboard() {
         {loadError && (
           <div className="alert error" role="alert">
             <p>{loadError}</p>
-            <button type="button" className="btn" onClick={() => void load()}>
+            <button type="button" className="btn" onClick={() => void data.refresh()}>
               عاود
             </button>
           </div>
@@ -297,7 +304,7 @@ export function Dashboard() {
             ) : (
               <ul className="cards">
                 {visible.map((c) => (
-                  <li key={c.row} className={`card status-${c.status}`}>
+                  <li key={c.uid} className={`card status-${c.status}${c.pending ? " is-pending" : ""}`}>
                     <div className="card-top">
                       <div className="card-who">
                         <h3>{c.name}</h3>
@@ -307,7 +314,14 @@ export function Dashboard() {
                           </a>
                         )}
                       </div>
-                      <span className={`pill ${c.status}`}>{STATUS_LABEL[c.status]}</span>
+                      <div className="card-tags">
+                        <span className={`pill ${c.status}`}>{STATUS_LABEL[c.status]}</span>
+                        {c.pending && (
+                          <span className="pill pending-pill" title="محفوظ فالتيليفون، ما وصلش للـ Google Sheet باقي">
+                            ما تزامنش
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {c.itemsPlain && <p className="items">{c.itemsPlain}</p>}
                     <div className="card-money">
@@ -348,10 +362,10 @@ export function Dashboard() {
         <CustomerForm
           today={today}
           onClose={() => setDialog(null)}
-          onSaved={(c) => {
-            replaceCustomer(c);
+          onSubmit={async (values) => {
+            await data.add(values);
             setDialog(null);
-            setToast(`تزاد ${c.name}`);
+            setToast(`تزاد ${values.name}${savedNote}`);
           }}
         />
       )}
@@ -360,10 +374,10 @@ export function Dashboard() {
           customer={dialog.customer}
           today={today}
           onClose={() => setDialog(null)}
-          onSaved={(c) => {
-            replaceCustomer(c);
+          onSubmit={async (values) => {
+            await data.edit(dialog.customer, values);
             setDialog(null);
-            setToast(`تبدلات معلومات ${c.name}`);
+            setToast(`تبدلات معلومات ${values.name}${savedNote}`);
           }}
         />
       )}
@@ -372,10 +386,10 @@ export function Dashboard() {
           customer={dialog.customer}
           today={today}
           onClose={() => setDialog(null)}
-          onSaved={(c) => {
-            replaceCustomer(c);
+          onSubmit={async (p) => {
+            await data.pay(dialog.customer, p);
             setDialog(null);
-            setToast(`تسجلات الدفعة ديال ${c.name}`);
+            setToast(`تسجلات الدفعة ديال ${dialog.customer.name}${savedNote}`);
           }}
         />
       )}
@@ -449,7 +463,9 @@ function DeleteDialog({ customer, onClose, onConfirm }: { customer: Customer; on
         </div>
       </dl>
       {customer.remaining > 0 && <p className="alert warn">هاد الزبون مازال عليه {money(customer.remaining)}.</p>}
-      <p className="muted small">السطر {customer.row} غادي يتمسح نهائيا من الـ Google Sheet.</p>
+      <p className="muted small">
+        {customer.row ? `السطر ${customer.row} غادي يتمسح نهائيا من الـ Google Sheet.` : "هاد الزبون مازال ما وصلش للـ Google Sheet، غادي يتمسح من التيليفون."}
+      </p>
     </Modal>
   );
 }

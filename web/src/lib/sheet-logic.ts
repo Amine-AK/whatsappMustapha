@@ -257,7 +257,61 @@ export function rowsToCustomers(rows: unknown[][], today: string): Customer[] {
 
 /** True when someone changed the row since `expected` was read (or rows moved). */
 export function rowChanged(current: unknown[], expected: string[]): boolean {
-  return CHECKED_COLUMNS.some((i) => cell(current, i) !== String(expected[i] ?? "").trim());
+  return CHECKED_COLUMNS.some((i) => !sameCell(i, cell(current, i), String(expected[i] ?? "")));
+}
+
+const AMOUNT_COLUMNS: number[] = [COL.sell, COL.buy, COL.installment];
+
+/**
+ * Compare two values of one column by meaning, not by how Sheets displays them
+ * ("2026-11-04" = "04/11/2026", "1500.5" = "1500,5", "3000+500" = "3500").
+ */
+export function sameCell(col: number, a: string, b: string): boolean {
+  const x = String(a ?? "").trim();
+  const y = String(b ?? "").trim();
+  if (x === y) return true;
+  if (col === COL.dueDate) return parseSheetDate(x) === parseSheetDate(y);
+  if (AMOUNT_COLUMNS.includes(col)) {
+    // Text that isn't an amount (e.g. "حسب الاتفاق") must match exactly.
+    if (!extractNumbers(x).length || !extractNumbers(y).length) return false;
+    return Math.abs(parseSum(x) - parseSum(y)) < 0.005;
+  }
+  return x.replace(/\s+/g, " ") === y.replace(/\s+/g, " ");
+}
+
+const INPUT_COLUMNS: [keyof CustomerInput, number][] = [
+  ["name", COL.name],
+  ["phone", COL.phone],
+  ["items", COL.items],
+  ["sell", COL.sell],
+  ["buy", COL.buy],
+  ["advance", COL.advance],
+  ["period", COL.period],
+  ["dueDate", COL.dueDate],
+  ["installment", COL.installment],
+];
+
+/** True when the row already holds exactly these values (used to make retries safe). */
+export function rowMatchesInput(row: unknown[], input: CustomerInput): boolean {
+  return INPUT_COLUMNS.every(([key, col]) => sameCell(col, cell(row, col), input[key]));
+}
+
+/** Rows (1-based sheet numbers, header = 1) whose content matches `expected`. */
+export function findRowsMatching(rows: unknown[][], expected: string[]): number[] {
+  const out: number[] = [];
+  rows.forEach((r, i) => {
+    if (!rowChanged(r, expected)) out.push(i + 2);
+  });
+  return out;
+}
+
+export function isStamp(s: string): boolean {
+  return /^\d{2}\/\d{2}\/\d{4} - \d{2}:\d{2}$/.test(s);
+}
+
+/** Stamp the "+"-separated parts of items and payments now, like the server would. */
+export function stampInput(input: CustomerInput, stamp: string): CustomerInput {
+  return { ...input, items: addMissingStamps(input.items, stamp), advance: addMissingStamps(input.advance, stamp) };
 }
 
 // ---------------------------------------------------------------- writing

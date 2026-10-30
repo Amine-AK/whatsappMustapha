@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { apiFetch } from "@/lib/client";
 import { money } from "@/lib/format";
 import {
   customerToInput,
@@ -44,10 +43,11 @@ interface Props {
   customer?: Customer; // edit when set, add otherwise
   today: string;
   onClose: () => void;
-  onSaved: (c: Customer) => void;
+  /** Saves the values (on the device first, then in the sheet). */
+  onSubmit: (values: CustomerInput) => Promise<void>;
 }
 
-export function CustomerForm({ customer, today, onClose, onSaved }: Props) {
+export function CustomerForm({ customer, today, onClose, onSubmit }: Props) {
   const editing = Boolean(customer);
   const [values, setValues] = useState<CustomerInput>(() =>
     customer ? customerToInput(customer) : { ...EMPTY, dueDate: nextDateForPeriod("شهر", today) },
@@ -92,13 +92,7 @@ export function CustomerForm({ customer, today, onClose, onSaved }: Props) {
     setSaving(true);
     setServerError("");
     try {
-      const data = customer
-        ? await apiFetch<{ customer: Customer }>(`/api/customers/${customer.row}`, {
-            method: "PUT",
-            body: { input: values, expected: customer.expected },
-          })
-        : await apiFetch<{ customer: Customer }>("/api/customers", { method: "POST", body: values });
-      onSaved(data.customer);
+      await onSubmit({ ...values, name: values.name.trim(), items: values.items.trim() });
     } catch (e) {
       setServerError(e instanceof Error ? e.message : String(e));
       setStep("form");

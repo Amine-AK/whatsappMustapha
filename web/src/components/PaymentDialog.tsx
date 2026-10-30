@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { apiFetch } from "@/lib/client";
 import { money } from "@/lib/format";
 import { isManualPeriod, suggestNextDueDate, type Customer } from "@/lib/sheet-logic";
 import { Modal } from "./Modal";
@@ -10,10 +9,10 @@ interface Props {
   customer: Customer;
   today: string;
   onClose: () => void;
-  onSaved: (c: Customer) => void;
+  onSubmit: (p: { amount: number; paidDate: string; nextDueDate: string }) => Promise<void>;
 }
 
-export function PaymentDialog({ customer, today, onClose, onSaved }: Props) {
+export function PaymentDialog({ customer, today, onClose, onSubmit }: Props) {
   const [amount, setAmount] = useState(() => {
     const n = Number(String(customer.installment).replace(",", "."));
     return n > 0 ? String(Math.min(n, customer.remaining)) : "";
@@ -33,11 +32,7 @@ export function PaymentDialog({ customer, today, onClose, onSaved }: Props) {
     setSaving(true);
     setError("");
     try {
-      const data = await apiFetch<{ customer: Customer }>(`/api/customers/${customer.row}/payments`, {
-        method: "POST",
-        body: { amount: value, paidDate, nextDueDate: after > 0 ? nextDueDate : "", expected: customer.expected },
-      });
-      onSaved(data.customer);
+      await onSubmit({ amount: value, paidDate, nextDueDate: after > 0 ? nextDueDate : "" });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

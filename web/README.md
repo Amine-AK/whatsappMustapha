@@ -129,8 +129,34 @@ for this:
 - **PC / laptop (Chrome or Edge):** open the address and click the install icon
   at the right of the address bar. Or just keep using it in the browser.
 
-The app needs internet to show customers: the data always comes live from the
-sheet. Without internet it opens an "offline" page instead of failing.
+## Working without internet
+
+After the app has been opened once with internet on a device, it also works
+**offline** on that device:
+
+- It opens and shows the customers as they were at the last sync (the bar at
+  the top says when).
+- You can **add, edit, record payments and delete**. Each change is saved on the
+  device right away and marked **ما تزامنش** (not synced yet).
+- When the connection comes back, the changes are sent to the Google Sheet **by
+  themselves, in the order you made them**. This happens as soon as the phone is
+  back online, when you open the app, and every 30 seconds while changes wait.
+  The app must be open for this; a closed app syncs the next time it's opened.
+- **Reminders need internet** and wait until every change has been sent, so a
+  customer who paid offline never gets a reminder by mistake.
+
+What makes syncing safe:
+
+- **Nothing is applied twice.** If the connection drops after the sheet saved a
+  change but before the phone heard back, the phone sends it again and the
+  server recognises it (same customer, same payment, same time stamp).
+- **Rows can move.** If someone deleted a row above in the meantime, the
+  customer is found by its content, not by its row number.
+- **Other people's changes are never overwritten.** If a customer was changed
+  in the sheet while you edited them offline, your change is refused and listed
+  under ⚠️ at the top: choose **عاود** (send again) or **تجاهل** (drop it).
+- The changes waiting on a device live in that browser's storage. Clearing the
+  browser data, or uninstalling the app, before they're synced loses them.
 
 ## Security
 
@@ -157,4 +183,6 @@ Code map:
 | `src/app/api/…` | Server routes used by the app |
 | `src/proxy.ts` | Login check on every request |
 | `src/components/` | Screens: list, form, payment, reminders |
-| `public/sw.js` | Service worker (install + offline page; customer data is never cached) |
+| `public/sw.js` | Service worker: keeps the app itself on the device so it opens offline |
+| `src/lib/offline.ts`, `src/components/useOfflineCustomers.ts` | Offline changes: saved on the device (IndexedDB) and synced in order |
+| `src/lib/rows.ts` | Finds a customer's row by content when rows moved |

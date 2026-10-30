@@ -340,3 +340,35 @@ input[type="date"] { min-height: 44px; }
 /* Numbers typed with spaces ("06 70 11 22 33") must not be reordered by the RTL layout. */
 [dir="ltr"] { direction: ltr; unicode-bidi: isolate; }
 .phone { text-align: left; }
+
+/* ---------------------------------------------------------------- offline & sync */
+
+.syncbar {
+  display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); font-size: 14px;
+}
+.syncbar-row { display: flex; align-items: center; gap: 10px; }
+.syncbar-text { flex: 1; min-width: 0; }
+.syncbar-note { font-size: 13px; color: var(--muted); }
+.sync-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--accent); }
+.syncbar.offline { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+.syncbar.offline .sync-dot { background: var(--warn); }
+.syncbar.offline .syncbar-note { color: var(--warn); }
+.syncbar.wait .sync-dot { background: var(--warn); }
+.syncbar.busy .sync-dot { background: var(--info); animation: sync-pulse 1s ease-in-out infinite; }
+@keyframes sync-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .syncbar.busy .sync-dot { animation: none; } }
+
+.small-btn { min-height: 34px; padding: 0 12px; font-size: 13px; }
+
+.sync-failed { border-top: 1px solid var(--line); padding-top: 6px; }
+.sync-failed-toggle { border: 0; background: none; padding: 4px 0; color: var(--danger); font-weight: 500; cursor: pointer; text-align: start; }
+.sync-failed ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
+.sync-failed li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--danger-soft); }
+.sync-failed li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.sync-failed li .small { color: var(--danger); }
+.sync-failed-actions { display: flex; gap: 6px; flex: none; }
+
+.card-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.pending-pill { background: var(--warn-soft); color: var(--warn); }
+.card.is-pending { border-style: dashed; }
