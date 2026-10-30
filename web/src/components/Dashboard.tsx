@@ -8,6 +8,7 @@ import { displayDate, installmentText } from "@/lib/receipt";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { ArchiveView } from "./ArchiveView";
 import { ClientDetail } from "./ClientDetail";
+import { InstallButton } from "./InstallButton";
 import { NewClientForm } from "./ClientForms";
 import { PaymentForm } from "./MoneyForms";
 import { ReceiptDialog } from "./ReceiptDialog";
@@ -145,6 +146,7 @@ export function Dashboard() {
           </div>
         </div>
         <div className="topbar-actions">
+          <InstallButton />
           <button type="button" className="btn ghost" onClick={() => void data.refresh()} disabled={!online || data.syncing} aria-label="حدّث من الـ Google Sheet">
             {data.syncing ? "…" : "↻"}
           </button>
@@ -184,6 +186,7 @@ export function Dashboard() {
           </div>
         </section>
 
+        {/* On a phone this row sits fixed at the bottom of the screen, under the thumb. */}
         <div className="actions-row">
           <button type="button" className="btn primary" onClick={() => setDialog({ kind: "add" })}>
             + زبون جديد

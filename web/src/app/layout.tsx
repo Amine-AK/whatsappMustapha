@@ -32,9 +32,15 @@ export const viewport: Viewport = {
   ],
 };
 
+// The browser can offer the install prompt before React has loaded: keep it for InstallButton.
+const CATCH_INSTALL_PROMPT = `window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__installPrompt=e;window.dispatchEvent(new Event("installprompt-ready"))});`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ar" dir="rtl" className={plex.variable}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: CATCH_INSTALL_PROMPT }} />
+      </head>
       <body>
         {children}
         <RegisterServiceWorker />
