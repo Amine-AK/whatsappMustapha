@@ -1,15 +1,18 @@
-// Service worker: makes the app installable and opens it without network.
-// Customer data (/api/...) is never cached; it always comes from the sheet.
-const VERSION = "v1";
+// Service worker: makes the app installable and lets it open without internet.
+// It keeps the app itself (page, scripts, styles, fonts, icons) on the device.
+// Customer data is not handled here: the page keeps it in IndexedDB and syncs
+// it through /api, which is never cached.
+const VERSION = "v2";
 const STATIC_CACHE = `static-${VERSION}`;
 const PAGES_CACHE = `pages-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
+const NETWORK_TIMEOUT_MS = 4000;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
-      .then((cache) => cache.addAll([OFFLINE_URL, "/icons/icon-192.png"]))
+      .then((cache) => cache.addAll([OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png", "/manifest.webmanifest"]))
       .then(() => self.skipWaiting()),
   );
 });
@@ -23,23 +26,51 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+function isStatic(url) {
+  return url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/") || url.pathname === "/manifest.webmanifest";
+}
+
+async function put(cacheName, request, response) {
+  // Never keep a redirect (e.g. to /login when the session expired) as the page.
+  if (!response || !response.ok || response.redirected || response.type === "opaqueredirect") return;
+  const cache = await caches.open(cacheName);
+  await cache.put(request, response);
+}
+
+// The page sends the files it loaded, so the app opens offline after the first visit.
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type !== "warm-cache" || !Array.isArray(data.urls)) return;
+  event.waitUntil(
+    Promise.all(
+      data.urls.map(async (href) => {
+        try {
+          const url = new URL(href, self.location.origin);
+          if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+          const cacheName = isStatic(url) ? STATIC_CACHE : PAGES_CACHE;
+          if (isStatic(url) && (await caches.match(url.href))) return;
+          const key = isStatic(url) ? url.href : url.origin + url.pathname;
+          await put(cacheName, key, await fetch(url.href, { credentials: "same-origin" }));
+        } catch {}
+      }),
+    ),
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
-  // Built files have a hash in their name: cache first.
-  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/")) {
+  // App files have a hash in their name: from the device first.
+  if (isStatic(url)) {
     event.respondWith(
       caches.match(request).then(
         (cached) =>
           cached ||
           fetch(request).then((res) => {
-            if (res.ok) {
-              const copy = res.clone();
-              caches.open(STATIC_CACHE).then((c) => c.put(request, copy));
-            }
+            event.waitUntil(put(STATIC_CACHE, request, res.clone()));
             return res;
           }),
       ),
@@ -47,18 +78,28 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Pages: network first, last good copy or the offline page when there is no network.
+  // Pages: the network if it answers within 4 s, otherwise the copy on the device.
   if (request.mode === "navigate") {
+    const key = url.origin + url.pathname;
     event.respondWith(
-      fetch(request)
-        .then((res) => {
-          if (res.ok && !res.redirected) {
-            const copy = res.clone();
-            caches.open(PAGES_CACHE).then((c) => c.put(request, copy));
-          }
+      (async () => {
+        const network = fetch(request).then((res) => {
+          event.waitUntil(put(PAGES_CACHE, key, res.clone()));
           return res;
-        })
-        .catch(async () => (await caches.match(request)) || (await caches.match(OFFLINE_URL))),
+        });
+        const timeout = new Promise((resolve) => setTimeout(() => resolve(null), NETWORK_TIMEOUT_MS));
+        try {
+          const first = await Promise.race([network, timeout]);
+          if (first) return first;
+        } catch {}
+        const cached = await caches.match(key);
+        if (cached) return cached;
+        try {
+          return await network;
+        } catch {
+          return (await caches.match(OFFLINE_URL)) || Response.error();
+        }
+      })(),
     );
   }
 });

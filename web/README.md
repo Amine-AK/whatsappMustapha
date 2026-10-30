@@ -1,53 +1,74 @@
 # ELECTRO-LMESTOUR: credit app (Next.js PWA)
 
-A web app to manage customer credit, connected to the same Google Sheet as
-`code.gs`. It opens in the browser on a PC or laptop and installs on an Android
-phone like a normal app.
+A web app to manage customer credit, stored in a Google Sheet. It opens in the
+browser on a PC or laptop and installs on an Android phone like a normal app.
+It works offline and syncs when the connection comes back.
+
+Each customer has **one running account**: everything they bought (1 to 20+
+purchases a year: appliances, chargers, a phone repair…) minus everything they
+paid, with **one instalment** (الطريطة) that you raise when the debt grows.
 
 What it does:
 
-- **List** every customer with what they still owe and their next payment date.
-- **Search** by name or phone number (`0661…`, `+212 661…` and `661…` all match).
-- **Filter** by status (late, today, tomorrow, upcoming, paid), by payment date
-  (from / to) and by amount still owed (from / to), and sort.
-- **Add** a customer.
-- **Edit** a customer: the app shows what will change and asks to confirm.
-- **Delete** a customer: the app asks to confirm.
-- **Add a payment**: amount, the day it was paid (today by default, can be
-  changed) and the next payment date (one period later by default, can be changed).
+- **Customers who owe** are listed first; search by name or phone (`0661…`,
+  `+212 661…` and `661…` all match). Also search among customers who have paid,
+  everyone, or the **archive**.
+- **Filter** by status (late, today, tomorrow, upcoming), next payment date and
+  amount owed, and sort.
+- **Customer account**: totals, instalment and months left, every purchase with
+  what is left on it, every payment, and the history of instalment changes.
+- **New purchase** for an existing customer, with a down payment, and a
+  suggested new instalment (logged with the reason).
+- **Payment**: amount, date and time (can be changed), the item it is for (a
+  list; by default the oldest item not fully paid), next payment date.
+- **Fix mistakes**: edit a purchase or a payment, **move a payment recorded on the
+  wrong customer**, or delete; edits and deletes ask for confirmation.
+- **Receipts** for the thermal printer: one payment, or the **whole account**
+  (كشف الحساب) with all items and payment dates.
+- **Archive**: customers who finished paying more than 3 months ago are archived
+  with one button; they can be found in the archive and brought back.
 - **Remind late customers** on WhatsApp through WATI, with one button.
 
-## How it works with the Google Sheet
+## The Google Sheet
 
-The app reads and writes the main tab (`Feuille 1`) in the exact format
-`code.gs` uses, so the sheet and its menu keep working:
+The app works in these tabs (it creates them; see *First start* below):
 
-| Column | What the app writes |
+| Tab | One row per |
 |---|---|
-| A, B | name, phone (kept as typed) |
-| C | items, each with a `(dd/MM/yyyy - HH:mm)` stamp |
-| D, E | selling and buying price |
-| F, H | profit and remaining, as `"X درهم"` |
-| G | payments: `1000 (01/10/2026 - 10:00) + 500 (25/10/2026 - 14:30)` |
-| I, J | period (سيمانة / 15 يوم / شهر / تحديد يدوي) and next payment date |
-| K–M | left as they are |
-| N | instalment amount |
-| O–Q | not touched (the script fills its WhatsApp links and print button when the sheet opens) |
+| `الزبناء` | customer: number (C-…), name, phone, instalment, period, next payment date, notes, and the totals bought / paid / remaining (written by the app) |
+| `المشتريات` | purchase: customer, date, item, selling price, buying price |
+| `الدفعات` | payment: receipt number (P-…), customer, date, time, amount, تسبيق/دفعة, item |
+| `تغييرات الطريطة` | instalment change: old and new amount and period, reason |
+| `أرشيف الزبناء`, `أرشيف المشتريات`, `أرشيف الدفعات` | archived customers and their history |
+| `سجل التذكيرات` | WhatsApp reminder sent |
 
-Also:
+Customers, purchases and payments are linked by their numbers (`C-…`, `S-…`,
+`P-…`), so moving or sorting rows by hand doesn't break anything. You can read
+and fix things in the sheet directly, but **don't change the numbers in the
+first columns**.
 
-- **The hidden `_Backup_Security_` tab is kept in sync.** Edits made by the app
-  don't trigger the script, so the app copies each changed row there itself and
-  deletes the same row there on delete. Without this, the secret-code protection
-  in the sheet would compare against wrong rows.
-- **Edits are never lost.** If someone changed a row in the sheet after the app
-  loaded it, the app refuses to save and asks you to refresh, instead of
-  overwriting their change.
-- **Formulas are never written.** Text is saved as text, so a name starting with
-  `=` can't run a formula.
-- **Every reminder is logged** in a new tab `سجل التذكيرات` (date, customer,
-  phone, result). A customer isn't reminded twice the same day for the same
-  due date.
+Size: about 1000 active customers and 3000 a year make roughly 25,000 rows a
+year, far below Google Sheets' limit (10 million cells). Archiving keeps the
+active tabs small, so the app stays fast.
+
+### First start: moving the old sheet
+
+The first time the app opens on a sheet without these tabs, it shows
+**«زيد الأوراق ونقل الزبناء»**. That creates the tabs and moves every customer of
+the old `Feuille 1` (one row per customer, items and payments joined with `+`):
+each item becomes a purchase with its date and price, each payment a payment
+with its date and time. `Feuille 1` is left as it was, as a backup.
+
+### The old Apps Script (code.gs) is no longer used
+
+The app replaces everything `code.gs` did (menu, WhatsApp links, late list,
+invoice, profit). It was removed from this repository, but it still lives in
+the sheet itself. To stop it:
+
+1. Open the sheet > **Extensions > Apps Script**.
+2. **Triggers** (clock icon, left): delete every trigger (`onEditInstalled`,
+   `runDailyMorningAutomation`).
+3. Back in the editor, delete the code (or the whole project) and save.
 
 ## 1. Google Sheets access (once)
 
@@ -69,7 +90,7 @@ last 24 hours with a **template approved by WhatsApp**.
 
 1. In WATI: **Broadcast > Your templates > New template message**.
    - Name: `debt_reminder_ar`, category **Utility**, language **Arabic**.
-   - Body. WATI fills `{{1}}`…`{{5}}` **in this order**: name, items, due
+   - Body. WATI fills `{{1}}`…`{{5}}` **in this order**: name, items still being paid, due
      date, remaining amount, instalment.
 
      ```
@@ -129,8 +150,65 @@ for this:
 - **PC / laptop (Chrome or Edge):** open the address and click the install icon
   at the right of the address bar. Or just keep using it in the browser.
 
-The app needs internet to show customers: the data always comes live from the
-sheet. Without internet it opens an "offline" page instead of failing.
+## Printing receipts (thermal printer)
+
+After you record a payment, the receipt (**وصل الأداء**) opens by itself with a
+**🖨️ طبع** button. In a customer's account, **وصل** next to any payment prints it
+again, and **كشف الحساب** prints the whole account. It works offline too.
+
+- **Payment receipt:** shop, receipt number (`P-…`), date and time, customer and
+  number, the item it was for, the amount, and the account right after that
+  payment (total, paid so far, remaining, next date, instalment).
+- **Account statement:** every purchase with its date, price and what is left on
+  it, every payment with its date, totals and instalment. For a long history,
+  tick "only the last 12 payments" (the older ones are printed as one total).
+
+Choose **58 mm** or **80 mm** paper in the receipt window; the app remembers it on
+that device.
+
+- **PC / laptop (USB printer):** install the printer's driver (Xprinter, Epson
+  TM, Rongta…), then in the print window choose the printer, **Margins: None**,
+  **Scale: 100**, and the paper size of your roll (e.g. 80 × 297 mm or "Roll").
+  Turn off *Headers and footers*.
+- **Android phone (Bluetooth or USB printer):** Android needs a print service for
+  the printer. Install the printer maker's print plugin, or a general one such as
+  **RawBT**, enable it in *Settings > Connected devices > Printing*, then press
+  **طبع الوصل** and choose the printer.
+
+Do a test print once to check the width; if the right side is cut, choose 58 mm.
+
+## Working without internet
+
+After the app has been opened once with internet on a device, it also works
+**offline** on that device:
+
+- It opens and shows the customers as they were at the last sync (the bar at
+  the top says when).
+- You can **add, edit, record payments and delete**. Each change is saved on the
+  device right away and marked **ما تزامنش** (not synced yet).
+- When the connection comes back, the changes are sent to the Google Sheet **by
+  themselves, in the order you made them**. This happens as soon as the phone is
+  back online, when you open the app, and every 30 seconds while changes wait.
+  The app must be open for this; a closed app syncs the next time it's opened.
+- **Reminders need internet** and wait until every change has been sent, so a
+  customer who paid offline never gets a reminder by mistake.
+
+What makes syncing safe:
+
+- **Nothing is applied twice.** Every change has its own number; if the phone
+  sends it again (the connection dropped before the answer), the server sees it
+  is already there.
+- **Rows can move.** Everything is found by its number (C-…, S-…, P-…), not by
+  its row.
+- **Other people's changes are never overwritten.** If a customer, purchase or
+  payment was changed on another device while you edited it offline, your change
+  is refused and listed under ⚠️ at the top: **طبقو** (apply it anyway, on the
+  current version) or **تجاهل** (drop it).
+- **Few requests:** a whole batch of changes is saved with about 5 Google
+  requests, so a long offline day syncs in one go.
+- **Archive and restore need internet**, and wait until every change is synced.
+- The changes waiting on a device live in that browser's storage. Clearing the
+  browser data, or uninstalling the app, before they're synced loses them.
 
 ## Security
 
@@ -142,7 +220,7 @@ sheet. Without internet it opens an "offline" page instead of failing.
 ## Development
 
 ```bash
-npm test          # rules ported from code.gs (dates, amounts, phones, row format)
+npm test          # ledger rules, migration, receipts, dates, amounts, phones
 npm run lint      # TypeScript check
 npm run build
 ```
@@ -151,10 +229,15 @@ Code map:
 
 | Path | What |
 |---|---|
-| `src/lib/sheet-logic.ts` | The sheet's rules (port of `code.gs`): amounts, dates, phones, statuses, row format |
-| `src/lib/sheets.ts` | Google Sheets API: read, add, edit, delete rows, backup tab, reminder log |
+| `src/lib/ledger.ts` | Customers, purchases, payments, instalment changes; every change as an operation (`applyOp`, used on the phone and on the server); account summaries |
+| `src/lib/ledger-sheet.ts` | Tabs and columns in the sheet; moving the old `Feuille 1` |
+| `src/lib/store.ts` | Server: read the tabs, save changes (only the rows that changed), setup, archive, restore |
+| `src/lib/sheets.ts` | Google Sheets API calls (batched) and the reminder log |
+| `src/lib/receipt.ts` | Payment receipt and account statement |
+| `src/lib/sheet-logic.ts` | Dates, amounts, phone numbers |
 | `src/lib/wati.ts` | WATI template message |
-| `src/app/api/…` | Server routes used by the app |
+| `src/app/api/…` | Server routes: `data`, `sync`, `setup`, `archive`, `reminders` |
+| `src/components/useLedger.ts` | Data on the device (IndexedDB), unsent changes, sync |
+| `src/components/` | Screens: list, account, forms, receipts, archive, reminders |
 | `src/proxy.ts` | Login check on every request |
-| `src/components/` | Screens: list, form, payment, reminders |
-| `public/sw.js` | Service worker (install + offline page; customer data is never cached) |
+| `public/sw.js` | Service worker: keeps the app itself on the device so it opens offline |

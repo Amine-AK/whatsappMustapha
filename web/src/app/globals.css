@@ -232,7 +232,7 @@ button, input, select { font: inherit; color: inherit; }
 .card.status-overdue .remaining { color: var(--danger); }
 .card-due { text-align: end; }
 
-.card-actions { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
+.card-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px; }
 .card-actions .btn { padding: 0 8px; }
 
 .empty { text-align: center; padding: 32px 12px; color: var(--muted); }
@@ -340,3 +340,152 @@ input[type="date"] { min-height: 44px; }
 /* Numbers typed with spaces ("06 70 11 22 33") must not be reordered by the RTL layout. */
 [dir="ltr"] { direction: ltr; unicode-bidi: isolate; }
 .phone { text-align: left; }
+
+/* ---------------------------------------------------------------- offline & sync */
+
+.syncbar {
+  display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); font-size: 14px;
+}
+.syncbar-row { display: flex; align-items: center; gap: 10px; }
+.syncbar-text { flex: 1; min-width: 0; }
+.syncbar-note { font-size: 13px; color: var(--muted); }
+.sync-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--accent); }
+.syncbar.offline { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+.syncbar.offline .sync-dot { background: var(--warn); }
+.syncbar.offline .syncbar-note { color: var(--warn); }
+.syncbar.wait .sync-dot { background: var(--warn); }
+.syncbar.busy .sync-dot { background: var(--info); animation: sync-pulse 1s ease-in-out infinite; }
+@keyframes sync-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .syncbar.busy .sync-dot { animation: none; } }
+
+.small-btn { min-height: 34px; padding: 0 12px; font-size: 13px; }
+
+.sync-failed { border-top: 1px solid var(--line); padding-top: 6px; }
+.sync-failed-toggle { border: 0; background: none; padding: 4px 0; color: var(--danger); font-weight: 500; cursor: pointer; text-align: start; }
+.sync-failed ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
+.sync-failed li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--danger-soft); }
+.sync-failed li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.sync-failed li .small { color: var(--danger); }
+.sync-failed-actions { display: flex; gap: 6px; flex: none; }
+
+.card-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.pending-pill { background: var(--warn-soft); color: var(--warn); }
+.card.is-pending { border-style: dashed; }
+
+/* ---------------------------------------------------------------- payment receipt (thermal printer) */
+
+.receipt-options { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.receipt-options .field { flex: 1 1 180px; }
+.receipt-options .field > span { font-size: 14px; font-weight: 500; }
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.segmented button { min-height: 40px; padding: 0 16px; border: 0; background: var(--surface); cursor: pointer; }
+.segmented button.on { background: var(--ink); color: var(--bg); }
+
+.receipt-preview {
+  display: flex; justify-content: center; padding: 16px 8px; border-radius: 10px;
+  background: var(--surface-2); overflow-x: auto;
+}
+.receipt-preview .ticket { box-shadow: 0 2px 10px rgb(0 0 0 / 18%); }
+
+/* The ticket is paper: black on white in every theme. 80 mm printers print 72 mm wide, 58 mm print 48 mm. */
+.ticket {
+  background: #fff; color: #000; font-family: var(--font);
+  padding: 3mm 2mm 6mm; display: grid; gap: 1.2mm; font-size: 10pt; line-height: 1.35;
+}
+.ticket.w80 { width: 72mm; }
+.ticket.w58 { width: 48mm; font-size: 8.5pt; }
+.ticket p { margin: 0; }
+.ticket hr { border: 0; border-top: 1px dashed #000; margin: 1mm 0; width: 100%; }
+.ticket-head { text-align: center; display: grid; gap: 0.5mm; }
+.ticket-shop { font-size: 1.35em; font-weight: 700; letter-spacing: 0.02em; }
+.ticket-title { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; }
+.ticket-title strong { font-size: 1.15em; }
+.ticket-line { display: flex; justify-content: space-between; gap: 3mm; }
+.ticket-line > span:first-child { flex: none; }
+.ticket-line > span:last-child { text-align: left; overflow-wrap: anywhere; font-weight: 500; }
+.ticket-strong { font-weight: 700; font-size: 1.1em; }
+.ticket-amount { display: grid; justify-items: center; gap: 0.5mm; padding: 1.5mm 0; border: 2px solid #000; border-radius: 2mm; }
+.ticket-amount strong { font-size: 1.7em; }
+.ticket-sign { margin-top: 3mm !important; }
+.ticket-thanks { text-align: center; font-weight: 700; margin-top: 1mm !important; }
+
+#print-root { display: none; }
+
+@media print {
+  @page { margin: 0; }
+  html, body { background: #fff !important; }
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block; }
+  #print-root .ticket { box-shadow: none; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ---------------------------------------------------------------- ledger screens */
+
+.card-open {
+  display: grid; gap: 10px; padding: 0; border: 0; background: none; text-align: start; color: inherit;
+  font: inherit; cursor: pointer; width: 100%;
+}
+.card-open:focus-visible { border-radius: 8px; }
+.card-actions.two { grid-template-columns: 1.3fr 1fr; }
+
+.archive-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-radius: 10px; background: var(--info-soft); color: var(--info); font-size: 14px;
+}
+
+.form-section { font-size: 15px; font-weight: 700; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.installment-hint { display: grid; gap: 10px; padding: 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px; }
+
+.picker { display: grid; gap: 6px; }
+.picker-current { font-size: 15px; }
+.picker input { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.picker-list { list-style: none; margin: 0; padding: 4px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 2px; max-height: 240px; overflow-y: auto; }
+.picker-list button {
+  width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: none; cursor: pointer; text-align: start;
+}
+.picker-list button:hover, .picker-list button[aria-selected="true"] { background: var(--accent-soft); }
+
+.detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.facts.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.installment-box {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px;
+}
+.installment-box > div { min-width: 0; display: grid; gap: 2px; }
+.detail-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 521px) { .detail-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.detail-section { display: grid; gap: 8px; }
+.detail-section h3 { font-size: 15px; }
+.rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rows li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center;
+  padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
+}
+.row-main { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.row-amount { font-size: 14px; font-weight: 500; white-space: nowrap; }
+.row-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.link-btn { border: 0; background: none; padding: 4px 0; color: var(--accent); font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-btn.danger-text { color: var(--danger); }
+.detail-footer { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.detail-footer:empty { display: none; }
+.plain-list { margin: 0; padding-inline-start: 18px; display: grid; gap: 4px; }
+
+.segmented.wide-seg { display: flex; }
+.segmented.wide-seg button { flex: 1; }
+.setup-card { width: min(480px, 100%); text-align: start; justify-items: stretch; }
+.setup-card h1, .setup-card .brand-mark { justify-self: center; text-align: center; }
+
+/* Statement (كشف الحساب) on the thermal ticket */
+.ticket-section { font-weight: 700; }
+.ticket-table { width: 100%; border-collapse: collapse; }
+.ticket-table td { padding: 0.6mm 0; vertical-align: top; }
+.ticket-table .t-date { white-space: nowrap; width: 1%; }
+/* The date cell is left-to-right; space the item cell next to it instead. */
+.ticket-table td + td { padding-inline-start: 2.5mm; }
+.ticket-table .t-num { text-align: left; white-space: nowrap; font-weight: 500; padding-inline-start: 2mm; }
+.t-sub { display: block; font-size: 0.85em; }

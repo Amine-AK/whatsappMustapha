@@ -4,6 +4,7 @@ import {
   addMonths,
   appendPayment,
   dueStatus,
+  findRowsMatching,
   formatMoroccoPhone,
   inputToRow,
   installmentLine,
@@ -12,7 +13,10 @@ import {
   parseSheetDate,
   parseSum,
   rowChanged,
+  rowMatchesInput,
   rowToCustomer,
+  sameCell,
+  stampInput,
   stripStamps,
   suggestNextDueDate,
   todayISO,
@@ -184,5 +188,31 @@ describe("text helpers", () => {
   it("validates input", () => {
     const errors = validateInput({ name: "", phone: "123", items: "", sell: "", buy: "", advance: "", period: "", dueDate: "2026-02-31", installment: "" });
     expect(errors.map((e) => e.field)).toEqual(["name", "phone", "items", "sell", "dueDate"]);
+  });
+});
+
+describe("sync-safe comparisons", () => {
+  it("compares values, not how Sheets displays them", () => {
+    expect(sameCell(9, "2026-11-04", "04/11/2026")).toBe(true);
+    expect(sameCell(3, "1500.5", "1500,5")).toBe(true);
+    expect(sameCell(3, "3000+500", "3500")).toBe(true);
+    expect(sameCell(13, "حسب الاتفاق", "0")).toBe(false);
+    expect(sameCell(0, "Ahmed  Ali", "Ahmed Ali")).toBe(true);
+    expect(sameCell(9, "2026-11-04", "2026-11-05")).toBe(false);
+  });
+  it("finds a customer whose row number moved", () => {
+    const c = rowToCustomer(sheetRow(), 2, TODAY)!;
+    const other = sheetRow({ 0: "Fatima" });
+    expect(findRowsMatching([other, sheetRow({ 9: "20/10/2026" })], c.expected)).toEqual([3]);
+    expect(findRowsMatching([other], c.expected)).toEqual([]);
+  });
+  it("recognises a row that already has the new values", () => {
+    const input = stampInput(
+      { name: "Ahmed", phone: "0661234567", items: "TV", sell: "3000", buy: "2000", advance: "1000", period: "شهر", dueDate: "2026-10-20", installment: "500" },
+      "01/10/2026 - 10:00",
+    );
+    expect(input.items).toBe("TV (01/10/2026 - 10:00)");
+    expect(rowMatchesInput(sheetRow(), input)).toBe(true);
+    expect(rowMatchesInput(sheetRow({ 6: "1500 (01/10/2026 - 10:00)" }), input)).toBe(false);
   });
 });

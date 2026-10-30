@@ -1,5 +1,7 @@
 import "server-only";
-import { installmentLine, isValidPhone, makeStamp, todayISO, type Customer } from "./sheet-logic";
+import { unpaidItems, type ClientSummary } from "./ledger";
+import { installmentText } from "./receipt";
+import { formatAmount, formatMoroccoPhone, isValidPhone, makeStamp, todayISO } from "./sheet-logic";
 import type { ReminderLogEntry } from "./sheets";
 import type { ReminderParams } from "./wati";
 
@@ -9,22 +11,37 @@ export function logTimestamp(now = new Date()): string {
 }
 
 /** Already reminded today about this same due date. */
-export function sentToday(log: ReminderLogEntry[], c: Pick<Customer, "phoneIntl" | "dueDate">, today: string): boolean {
-  return log.some((e) => e.result === "sent" && e.phone === c.phoneIntl && e.dueDate === c.dueDate && e.sentAt.startsWith(today));
+export function sentToday(log: ReminderLogEntry[], s: ClientSummary, today: string): boolean {
+  const phone = formatMoroccoPhone(s.client.phone);
+  return log.some((e) => e.result === "sent" && e.phone === phone && e.dueDate === s.client.nextDueDate && e.sentAt.startsWith(today));
 }
 
-export function reminderBlocker(c: Customer): string | null {
-  if (c.status !== "overdue") return "ماشي متأخر";
-  if (!isValidPhone(c.phoneIntl)) return "رقم الهاتف غير صحيح";
+export function reminderBlocker(s: ClientSummary): string | null {
+  if (s.status !== "overdue") return "ماشي متأخر";
+  if (!isValidPhone(formatMoroccoPhone(s.client.phone))) return "رقم الهاتف غير صحيح";
   return null;
 }
 
-export function reminderParams(c: Customer): ReminderParams {
+export function reminderParams(s: ClientSummary): ReminderParams {
   return {
-    name: c.name,
-    items: c.itemsPlain || "-",
-    due_date: c.dueDate,
-    remaining: String(Math.round(c.remaining * 100) / 100),
-    installment: installmentLine(c.installment, c.period),
+    name: s.client.name,
+    items: unpaidItems(s).join(" + ") || "-",
+    due_date: s.client.nextDueDate,
+    remaining: formatAmount(s.remaining),
+    installment: installmentText(s) || "حسب الاتفاق",
+  };
+}
+
+/** What the reminder window lists for each late customer. */
+export function reminderRow(s: ClientSummary, log: ReminderLogEntry[], today: string) {
+  return {
+    id: s.client.id,
+    name: s.client.name,
+    phone: s.client.phone,
+    remaining: s.remaining,
+    dueDate: s.client.nextDueDate,
+    status: s.status,
+    blocker: reminderBlocker(s),
+    sentToday: sentToday(log, s, today),
   };
 }

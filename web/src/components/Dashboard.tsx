@@ -1,19 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/client";
-import { dueText, money, searchDigits, STATUS_LABEL } from "@/lib/format";
-import type { Customer, DueStatus } from "@/lib/sheet-logic";
-import { CustomerForm } from "./CustomerForm";
-import { Modal } from "./Modal";
-import { PaymentDialog } from "./PaymentDialog";
+import { dueText, matchesClient, money, STATUS_LABEL } from "@/lib/format";
+import { unpaidItems, type ClientSummary } from "@/lib/ledger";
+import { displayDate, installmentText } from "@/lib/receipt";
+import type { DueStatus } from "@/lib/sheet-logic";
+import { ArchiveView } from "./ArchiveView";
+import { ClientDetail } from "./ClientDetail";
+import { NewClientForm } from "./ClientForms";
+import { PaymentForm } from "./MoneyForms";
+import { ReceiptDialog } from "./ReceiptDialog";
 import { RemindersDialog } from "./RemindersDialog";
+import { SetupScreen } from "./SetupScreen";
+import { SyncBar } from "./SyncBar";
+import { useLedger } from "./useLedger";
+import { Confirm } from "./ui";
 
-type Sort = "due" | "debt-desc" | "debt-asc" | "name";
-type StatusFilter = "all" | "owing" | DueStatus;
+type Sort = "due" | "debt-desc" | "debt-asc" | "name" | "recent";
+/** Where to search: people who owe (default, fastest), paid, everyone, or the archive. */
+type Scope = "owing" | DueStatus | "paid-up" | "all" | "archive";
 
 interface Filters {
-  status: StatusFilter;
+  scope: Scope;
   from: string;
   to: string;
   minDebt: string;
@@ -21,55 +30,40 @@ interface Filters {
   sort: Sort;
 }
 
-const DEFAULT_FILTERS: Filters = { status: "owing", from: "", to: "", minDebt: "", maxDebt: "", sort: "due" };
+const DEFAULT_FILTERS: Filters = { scope: "owing", from: "", to: "", minDebt: "", maxDebt: "", sort: "due" };
 
-const STATUS_CHIPS: { value: StatusFilter; label: string }[] = [
+const SCOPES: { value: Scope; label: string }[] = [
   { value: "owing", label: "عليهم الكريدي" },
   { value: "overdue", label: STATUS_LABEL.overdue },
   { value: "today", label: STATUS_LABEL.today },
   { value: "tomorrow", label: STATUS_LABEL.tomorrow },
   { value: "upcoming", label: STATUS_LABEL.upcoming },
   { value: "nodate", label: STATUS_LABEL.nodate },
-  { value: "paid", label: STATUS_LABEL.paid },
+  { value: "paid-up", label: "خالصين" },
   { value: "all", label: "الكل" },
+  { value: "archive", label: "🗄️ الأرشيف" },
 ];
 
 type Dialog =
   | { kind: "add" }
-  | { kind: "edit"; customer: Customer }
-  | { kind: "pay"; customer: Customer }
-  | { kind: "delete"; customer: Customer }
+  | { kind: "client"; id: string }
+  | { kind: "pay"; id: string }
+  | { kind: "receipt"; id: string; paymentId?: string; notice?: string }
   | { kind: "remind" }
+  | { kind: "archive-all" }
   | null;
 
+const MAX_CARDS = 200;
+
 export function Dashboard() {
-  const [customers, setCustomers] = useState<Customer[] | null>(null);
-  const [today, setToday] = useState("");
-  const [loadError, setLoadError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const data = useLedger();
+  const { summaries, today, online } = data;
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [toast, setToast] = useState("");
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const data = await apiFetch<{ customers: Customer[]; today: string }>("/api/customers");
-      setCustomers(data.customers);
-      setToday(data.today);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -78,64 +72,64 @@ export function Dashboard() {
   }, [toast]);
 
   const visible = useMemo(() => {
-    if (!customers) return [];
-    const q = query.trim().toLowerCase();
-    const digits = searchDigits(q);
-    const min = filters.minDebt ? Number(filters.minDebt) : -Infinity;
-    const max = filters.maxDebt ? Number(filters.maxDebt) : Infinity;
-    const list = customers.filter((c) => {
-      if (q) {
-        const byName = c.name.toLowerCase().includes(q);
-        const byPhone = digits.length >= 3 && (c.phoneIntl.includes(digits) || c.phone.replace(/\D/g, "").includes(q.replace(/\D/g, "")));
-        if (!byName && !byPhone) return false;
-      }
-      if (filters.status === "owing" && c.remaining <= 0) return false;
-      if (filters.status !== "all" && filters.status !== "owing" && c.status !== filters.status) return false;
-      if (filters.from && (!c.dueDate || c.dueDate < filters.from)) return false;
-      if (filters.to && (!c.dueDate || c.dueDate > filters.to)) return false;
-      if (c.remaining < min || c.remaining > max) return false;
+    const f = filters;
+    const min = f.minDebt ? Number(f.minDebt) : -Infinity;
+    const max = f.maxDebt ? Number(f.maxDebt) : Infinity;
+    // Narrow by scope first: by default only people who owe money are searched.
+    const list = summaries.filter((s) => {
+      if (f.scope === "owing" && s.remaining <= 0) return false;
+      if (f.scope === "paid-up" && s.remaining > 0) return false;
+      if (!["owing", "paid-up", "all", "archive"].includes(f.scope) && s.status !== f.scope) return false;
+      if (!matchesClient(s.client.name, s.client.phone, query)) return false;
+      if (f.from && (!s.client.nextDueDate || s.client.nextDueDate < f.from)) return false;
+      if (f.to && (!s.client.nextDueDate || s.client.nextDueDate > f.to)) return false;
+      if (s.remaining < min || s.remaining > max) return false;
       return true;
     });
-    const byDue = (a: Customer, b: Customer) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999");
-    const sorters: Record<Sort, (a: Customer, b: Customer) => number> = {
-      due: byDue,
+    const due = (s: ClientSummary) => (s.remaining > 0 && s.client.nextDueDate) || "9999";
+    const sorters: Record<Sort, (a: ClientSummary, b: ClientSummary) => number> = {
+      due: (a, b) => due(a).localeCompare(due(b)),
       "debt-desc": (a, b) => b.remaining - a.remaining,
       "debt-asc": (a, b) => a.remaining - b.remaining,
-      name: (a, b) => a.name.localeCompare(b.name, "ar"),
+      name: (a, b) => a.client.name.localeCompare(b.client.name, "ar"),
+      recent: (a, b) => b.lastActivity.localeCompare(a.lastActivity),
     };
-    return list.sort(sorters[filters.sort]);
-  }, [customers, query, filters]);
+    return list.sort(sorters[f.sort]);
+  }, [summaries, query, filters]);
 
   const summary = useMemo(() => {
-    const list = customers ?? [];
-    const owing = list.filter((c) => c.remaining > 0);
-    const overdue = owing.filter((c) => c.status === "overdue");
+    const owing = summaries.filter((s) => s.remaining > 0);
+    const overdue = owing.filter((s) => s.status === "overdue");
     return {
-      totalDebt: owing.reduce((s, c) => s + c.remaining, 0),
+      totalDebt: owing.reduce((t, s) => t + s.remaining, 0),
       owing: owing.length,
       overdue: overdue.length,
-      overdueDebt: overdue.reduce((s, c) => s + c.remaining, 0),
-      dueSoon: owing.filter((c) => c.status === "today" || c.status === "tomorrow").length,
+      overdueDebt: overdue.reduce((t, s) => t + s.remaining, 0),
+      dueSoon: owing.filter((s) => s.status === "today" || s.status === "tomorrow").length,
+      archivable: summaries.filter((s) => s.archivable),
     };
-  }, [customers]);
+  }, [summaries]);
 
-  const activeFilterCount =
-    Number(Boolean(filters.from)) + Number(Boolean(filters.to)) + Number(Boolean(filters.minDebt)) + Number(Boolean(filters.maxDebt));
+  if (data.needsSetup) return <SetupScreen onDone={() => void data.refresh()} />;
 
-  function replaceCustomer(updated: Customer) {
-    setCustomers((list) => {
-      if (!list) return [updated];
-      const i = list.findIndex((c) => c.row === updated.row);
-      return i === -1 ? [...list, updated] : list.map((c) => (c.row === updated.row ? updated : c));
-    });
-  }
+  const savedNote = online ? "" : " · محفوظ فالتيليفون";
+  const reminderBlocked = !online ? "التذكير خاصو الأنترنيت" : data.pendingCount > 0 || data.syncing ? "تسنى حتى تتزامن التعديلات" : "";
+  const archiveBlocked = !online || data.pendingCount > 0 || data.syncing;
+  const activeFilterCount = [filters.from, filters.to, filters.minDebt, filters.maxDebt].filter(Boolean).length;
+  const find = (id: string) => summaries.find((s) => s.client.id === id);
 
-  async function confirmDelete(c: Customer) {
-    await apiFetch(`/api/customers/${c.row}`, { method: "DELETE", body: { expected: c.expected } });
+  async function archiveAll() {
     setDialog(null);
-    setToast(`تمسح ${c.name}`);
-    // Rows below the deleted one move up, so reload row numbers from the sheet.
-    await load();
+    setArchiving(true);
+    try {
+      const { archived } = await apiFetch<{ archived: number }>("/api/archive", { method: "POST", body: {} });
+      await data.refresh();
+      setToast(`تأرشفو ${archived} زبون`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : String(e));
+    } finally {
+      setArchiving(false);
+    }
   }
 
   return (
@@ -151,14 +145,16 @@ export function Dashboard() {
           </div>
         </div>
         <div className="topbar-actions">
-          <button type="button" className="btn ghost" onClick={() => void load()} disabled={loading} aria-label="حدّث">
-            {loading ? "…" : "↻"}
+          <button type="button" className="btn ghost" onClick={() => void data.refresh()} disabled={!online || data.syncing} aria-label="حدّث من الـ Google Sheet">
+            {data.syncing ? "…" : "↻"}
           </button>
           <button
             type="button"
             className="btn ghost"
+            disabled={!online}
             onClick={async () => {
-              await apiFetch("/api/logout", { method: "POST" });
+              if (data.pendingCount > 0 && !window.confirm("مازال كاين تعديلات ما تزامنوش. غادي يبقاو فالتيليفون ويتزامنو ملي تدخل من جديد. نخرج؟")) return;
+              await apiFetch("/api/logout", { method: "POST" }).catch(() => {});
               window.location.href = "/login";
             }}
           >
@@ -168,6 +164,8 @@ export function Dashboard() {
       </header>
 
       <main className="content">
+        <SyncBar state={data} />
+
         <section className="summary" aria-label="ملخص">
           <div className="stat">
             <span className="stat-label">مجموع الكريدي</span>
@@ -190,11 +188,32 @@ export function Dashboard() {
           <button type="button" className="btn primary" onClick={() => setDialog({ kind: "add" })}>
             + زبون جديد
           </button>
-          <button type="button" className="btn whatsapp" onClick={() => setDialog({ kind: "remind" })}>
+          <button
+            type="button"
+            className="btn whatsapp"
+            onClick={() => setDialog({ kind: "remind" })}
+            disabled={Boolean(reminderBlocked)}
+            aria-describedby={reminderBlocked ? "remind-why" : undefined}
+          >
             تذكير المتأخرين
             {summary.overdue > 0 && <span className="badge">{summary.overdue}</span>}
           </button>
         </div>
+        {reminderBlocked && (
+          <p id="remind-why" className="muted small">
+            {reminderBlocked}
+          </p>
+        )}
+        {summary.archivable.length > 0 && (
+          <div className="archive-banner">
+            <p>
+              <strong>{summary.archivable.length}</strong> زبون خلصو كلشي من أكثر من 3 شهور.
+            </p>
+            <button type="button" className="btn small-btn" onClick={() => setDialog({ kind: "archive-all" })} disabled={archiveBlocked || archiving}>
+              {archiving ? "كنأرشفو…" : "أرشفهم"}
+            </button>
+          </div>
+        )}
 
         <div className="search-row">
           <label className="visually-hidden" htmlFor="search">
@@ -204,39 +223,35 @@ export function Dashboard() {
             id="search"
             type="search"
             className="search"
-            placeholder="قلب بالاسم ولا بالتيليفون…"
+            placeholder={filters.scope === "archive" ? "قلب فالأرشيف بالاسم ولا بالتيليفون…" : "قلب بالاسم ولا بالتيليفون…"}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button
-            type="button"
-            className={`btn ${showFilters ? "selected" : ""}`}
-            aria-expanded={showFilters}
-            aria-controls="filters"
-            onClick={() => setShowFilters((s) => !s)}
-          >
-            فلتر{activeFilterCount ? ` (${activeFilterCount})` : ""}
-          </button>
+          {filters.scope !== "archive" && (
+            <button type="button" className={`btn ${showFilters ? "selected" : ""}`} aria-expanded={showFilters} aria-controls="filters" onClick={() => setShowFilters((x) => !x)}>
+              فلتر{activeFilterCount ? ` (${activeFilterCount})` : ""}
+            </button>
+          )}
         </div>
 
-        <div className="chips" role="group" aria-label="الحالة">
-          {STATUS_CHIPS.map((chip) => (
+        <div className="chips" role="group" aria-label="فين تقلب">
+          {SCOPES.map((chip) => (
             <button
               key={chip.value}
               type="button"
-              className={`chip ${filters.status === chip.value ? "on" : ""}`}
-              aria-pressed={filters.status === chip.value}
-              onClick={() => setFilters((f) => ({ ...f, status: chip.value }))}
+              className={`chip ${filters.scope === chip.value ? "on" : ""}`}
+              aria-pressed={filters.scope === chip.value}
+              onClick={() => setFilters((f) => ({ ...f, scope: chip.value }))}
             >
               {chip.label}
             </button>
           ))}
         </div>
 
-        {showFilters && (
+        {showFilters && filters.scope !== "archive" && (
           <section id="filters" className="filters" aria-label="فلتر">
             <fieldset>
-              <legend>تاريخ الأداء</legend>
+              <legend>تاريخ الدفعة المقبلة</legend>
               <div className="filter-pair">
                 <label>
                   من
@@ -253,139 +268,116 @@ export function Dashboard() {
               <div className="filter-pair">
                 <label>
                   من
-                  <input inputMode="decimal" dir="ltr" value={filters.minDebt} onChange={(e) => setFilters((f) => ({ ...f, minDebt: e.target.value.replace(/[^\d.]/g, "") }))} />
+                  <input
+                    inputMode="decimal"
+                    dir="ltr"
+                    value={filters.minDebt}
+                    onChange={(e) => setFilters((f) => ({ ...f, minDebt: e.target.value.replace(/[^\d.]/g, "") }))}
+                  />
                 </label>
                 <label>
                   حتى
-                  <input inputMode="decimal" dir="ltr" value={filters.maxDebt} onChange={(e) => setFilters((f) => ({ ...f, maxDebt: e.target.value.replace(/[^\d.]/g, "") }))} />
+                  <input
+                    inputMode="decimal"
+                    dir="ltr"
+                    value={filters.maxDebt}
+                    onChange={(e) => setFilters((f) => ({ ...f, maxDebt: e.target.value.replace(/[^\d.]/g, "") }))}
+                  />
                 </label>
               </div>
             </fieldset>
             <fieldset>
               <legend>الترتيب</legend>
               <select value={filters.sort} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as Sort }))} aria-label="الترتيب">
-                <option value="due">تاريخ الأداء (الأقرب)</option>
+                <option value="due">الدفعة المقبلة (الأقرب)</option>
                 <option value="debt-desc">المتبقي (الأكبر)</option>
                 <option value="debt-asc">المتبقي (الأصغر)</option>
+                <option value="recent">آخر حركة</option>
                 <option value="name">الاسم</option>
               </select>
             </fieldset>
-            <button type="button" className="btn ghost" onClick={() => setFilters(DEFAULT_FILTERS)}>
+            <button type="button" className="btn ghost" onClick={() => setFilters({ ...DEFAULT_FILTERS, scope: filters.scope })}>
               مسح الفلتر
             </button>
           </section>
         )}
 
-        {loadError && (
-          <div className="alert error" role="alert">
-            <p>{loadError}</p>
-            <button type="button" className="btn" onClick={() => void load()}>
-              عاود
-            </button>
-          </div>
-        )}
-
-        {!customers && !loadError && <p className="muted center">كنجيبو الزبناء من الـ Google Sheet…</p>}
-
-        {customers && (
+        {filters.scope === "archive" ? (
+          <ArchiveView data={data} query={query} onToast={setToast} />
+        ) : (
           <>
-            <p className="result-count muted" aria-live="polite">
-              {visible.length} من {customers.length} زبون
-            </p>
-            {visible.length === 0 ? (
-              <p className="empty">ما لقينا حتى زبون بهاد البحث.</p>
-            ) : (
-              <ul className="cards">
-                {visible.map((c) => (
-                  <li key={c.row} className={`card status-${c.status}`}>
-                    <div className="card-top">
-                      <div className="card-who">
-                        <h3>{c.name}</h3>
-                        {c.phone && (
-                          <a className="phone" href={`tel:${c.phone.replace(/\s/g, "")}`} dir="ltr">
-                            {c.phone}
-                          </a>
-                        )}
-                      </div>
-                      <span className={`pill ${c.status}`}>{STATUS_LABEL[c.status]}</span>
-                    </div>
-                    {c.itemsPlain && <p className="items">{c.itemsPlain}</p>}
-                    <div className="card-money">
-                      <div>
-                        <span className="label">المتبقي</span>
-                        <span className="remaining">{money(c.remaining)}</span>
-                      </div>
-                      <div className="card-due">
-                        <span className="label">الدفعة المقبلة</span>
-                        <span>{c.remaining > 0 ? (c.dueDate || "—") : "—"}</span>
-                        {c.remaining > 0 && <span className="muted small">{dueText(c.dueDate, c.status, today)}</span>}
-                      </div>
-                    </div>
-                    <p className="muted small">
-                      الثمن {money(c.sellTotal)} · خلص {money(c.paidTotal)}
-                      {c.installment ? ` · الطريطة ${c.installment}` : ""}
-                    </p>
-                    <div className="card-actions">
-                      <button type="button" className="btn primary" onClick={() => setDialog({ kind: "pay", customer: c })} disabled={c.remaining <= 0}>
-                        دفعة
-                      </button>
-                      <button type="button" className="btn" onClick={() => setDialog({ kind: "edit", customer: c })}>
-                        تعديل
-                      </button>
-                      <button type="button" className="btn danger-ghost" onClick={() => setDialog({ kind: "delete", customer: c })}>
-                        حذف
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+            {data.loadError && (
+              <div className="alert error" role="alert">
+                <p>{data.loadError}</p>
+                <button type="button" className="btn" onClick={() => void data.refresh()}>
+                  عاود
+                </button>
+              </div>
+            )}
+            {!data.ledger && !data.loadError && <p className="muted center">كنجيبو الزبناء من الـ Google Sheet…</p>}
+            {data.ledger && (
+              <>
+                <p className="result-count muted" aria-live="polite">
+                  {visible.length} زبون
+                </p>
+                {visible.length === 0 ? (
+                  <p className="empty">{query ? "ما لقينا حتى زبون بهاد البحث هنا. جرب «الكل» ولا «الأرشيف»." : "ما كاين حتى زبون هنا."}</p>
+                ) : (
+                  <ul className="cards">
+                    {visible.slice(0, MAX_CARDS).map((s) => (
+                      <ClientCard
+                        key={s.client.id}
+                        s={s}
+                        today={today}
+                        onOpen={() => setDialog({ kind: "client", id: s.client.id })}
+                        onPay={() => setDialog({ kind: "pay", id: s.client.id })}
+                      />
+                    ))}
+                  </ul>
+                )}
+                {visible.length > MAX_CARDS && <p className="muted center small">كيبانو غير {MAX_CARDS} الأولين. قلب بالاسم باش تلقا الباقي.</p>}
+              </>
             )}
           </>
         )}
       </main>
 
       {dialog?.kind === "add" && (
-        <CustomerForm
-          today={today}
+        <NewClientForm
+          data={data}
           onClose={() => setDialog(null)}
-          onSaved={(c) => {
-            replaceCustomer(c);
-            setDialog(null);
-            setToast(`تزاد ${c.name}`);
+          onDone={(id, paymentId) => {
+            setToast(`تزاد الزبون${savedNote}`);
+            setDialog(paymentId ? { kind: "receipt", id, paymentId, notice: "تسجل الزبون والتسبيق" } : { kind: "client", id });
           }}
         />
       )}
-      {dialog?.kind === "edit" && (
-        <CustomerForm
-          customer={dialog.customer}
-          today={today}
+      {dialog?.kind === "client" && <ClientDetail data={data} clientId={dialog.id} onClose={() => setDialog(null)} onToast={setToast} />}
+      {dialog?.kind === "pay" && find(dialog.id) && (
+        <PaymentForm
+          data={data}
+          summary={find(dialog.id)!}
           onClose={() => setDialog(null)}
-          onSaved={(c) => {
-            replaceCustomer(c);
-            setDialog(null);
-            setToast(`تبدلات معلومات ${c.name}`);
-          }}
+          onDone={(paymentId) => setDialog({ kind: "receipt", id: dialog.id, paymentId, notice: `تسجلات الدفعة${savedNote}` })}
         />
       )}
-      {dialog?.kind === "pay" && (
-        <PaymentDialog
-          customer={dialog.customer}
-          today={today}
-          onClose={() => setDialog(null)}
-          onSaved={(c) => {
-            replaceCustomer(c);
-            setDialog(null);
-            setToast(`تسجلات الدفعة ديال ${c.name}`);
-          }}
-        />
+      {dialog?.kind === "receipt" && find(dialog.id) && (
+        <ReceiptDialog summary={find(dialog.id)!} mode="payment" paymentId={dialog.paymentId} notice={dialog.notice} onClose={() => setDialog(null)} />
       )}
-      {dialog?.kind === "delete" && <DeleteDialog customer={dialog.customer} onClose={() => setDialog(null)} onConfirm={confirmDelete} />}
-      {dialog?.kind === "remind" && (
-        <RemindersDialog
-          onClose={() => {
-            setDialog(null);
-          }}
-        />
+      {dialog?.kind === "remind" && <RemindersDialog onClose={() => setDialog(null)} />}
+      {dialog?.kind === "archive-all" && (
+        <Confirm title="أرشفة الخالصين" confirmLabel={`أرشف ${summary.archivable.length}`} onClose={() => setDialog(null)} onConfirm={() => void archiveAll()}>
+          <p className="lead">هاد الزبناء خلصو كلشي من أكثر من 3 شهور، غادي يتنقلو للأرشيف مع المشتريات والدفعات ديالهم:</p>
+          <ul className="plain-list">
+            {summary.archivable.slice(0, 15).map((s) => (
+              <li key={s.client.id}>
+                {s.client.name} <span className="muted small">· آخر حركة {displayDate(s.lastActivity)}</span>
+              </li>
+            ))}
+            {summary.archivable.length > 15 && <li className="muted">و {summary.archivable.length - 15} آخرين…</li>}
+          </ul>
+          <p className="muted small">تقدر تلقاهم فـ «🗄️ الأرشيف» وترجعهم إلا شراو من جديد.</p>
+        </Confirm>
       )}
 
       {toast && (
@@ -397,59 +389,48 @@ export function Dashboard() {
   );
 }
 
-function DeleteDialog({ customer, onClose, onConfirm }: { customer: Customer; onClose: () => void; onConfirm: (c: Customer) => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+function ClientCard({ s, today, onOpen, onPay }: { s: ClientSummary; today: string; onOpen: () => void; onPay: () => void }) {
+  const c = s.client;
+  const unpaid = unpaidItems(s);
   return (
-    <Modal
-      title="حذف الزبون"
-      onClose={onClose}
-      busy={busy}
-      footer={
-        <>
-          <button type="button" className="btn" onClick={onClose} disabled={busy}>
-            إلغاء
-          </button>
-          <button
-            type="button"
-            className="btn danger"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              setError("");
-              try {
-                await onConfirm(customer);
-              } catch (e) {
-                setError(e instanceof Error ? e.message : String(e));
-                setBusy(false);
-              }
-            }}
-          >
-            {busy ? "كيتمسح…" : "إيه، احذف"}
-          </button>
-        </>
-      }
-    >
-      {error && (
-        <p className="alert error" role="alert">
-          {error}
+    <li className={`card status-${s.status}`}>
+      <button type="button" className="card-open" onClick={onOpen} aria-label={`حساب ${c.name}`}>
+        <div className="card-top">
+          <div className="card-who">
+            <h3>{c.name}</h3>
+            {c.phone && (
+              <span className="phone" dir="ltr">
+                {c.phone}
+              </span>
+            )}
+          </div>
+          <span className={`pill ${s.status}`}>{STATUS_LABEL[s.status]}</span>
+        </div>
+        <p className="items">
+          {s.purchases.length} {s.purchases.length === 1 ? "سلعة" : "سلع"}
+          {unpaid.length > 0 && ` · باقي: ${unpaid.join("، ")}`}
         </p>
-      )}
-      <p className="lead">
-        واش متأكد بغيتي تحذف <strong>{customer.name}</strong> من الورقة؟
-      </p>
-      <dl className="facts">
-        <div>
-          <dt>السلع</dt>
-          <dd>{customer.itemsPlain || "—"}</dd>
+        <div className="card-money">
+          <div>
+            <span className="label">المتبقي</span>
+            <span className="remaining">{s.remaining > 0 ? money(s.remaining) : "خالص"}</span>
+          </div>
+          <div className="card-due">
+            <span className="label">الدفعة المقبلة</span>
+            <span>{s.remaining > 0 && c.nextDueDate ? displayDate(c.nextDueDate) : "—"}</span>
+            {s.remaining > 0 && <span className="muted small">{dueText(c.nextDueDate, s.status, today)}</span>}
+          </div>
         </div>
-        <div>
-          <dt>المتبقي</dt>
-          <dd className={customer.remaining > 0 ? "danger-text" : ""}>{money(customer.remaining)}</dd>
-        </div>
-      </dl>
-      {customer.remaining > 0 && <p className="alert warn">هاد الزبون مازال عليه {money(customer.remaining)}.</p>}
-      <p className="muted small">السطر {customer.row} غادي يتمسح نهائيا من الـ Google Sheet.</p>
-    </Modal>
+        {s.remaining > 0 && installmentText(s) && <p className="muted small">الطريطة: {installmentText(s)}</p>}
+      </button>
+      <div className="card-actions two">
+        <button type="button" className="btn primary" onClick={onPay} disabled={!s.purchases.length}>
+          دفعة
+        </button>
+        <button type="button" className="btn" onClick={onOpen}>
+          الحساب
+        </button>
+      </div>
+    </li>
   );
 }
