@@ -129,6 +129,30 @@ for this:
 - **PC / laptop (Chrome or Edge):** open the address and click the install icon
   at the right of the address bar. Or just keep using it in the browser.
 
+## Printing a payment receipt (thermal printer)
+
+After you record a payment, the receipt (**وصل الأداء**) opens by itself with a
+**🖨️ طبع الوصل** button. To print it again later, or to print an older payment,
+press **وصل** on the customer's card and pick the payment. It works offline too.
+
+The receipt shows the shop name and phone, a receipt number (date and time of the
+payment, e.g. `261030-1432`), the customer, the items, the amount paid, the total,
+how much was paid so far, what remains, the next payment date and the instalment.
+
+Choose **58 mm** or **80 mm** paper in the receipt window; the app remembers it on
+that device.
+
+- **PC / laptop (USB printer):** install the printer's driver (Xprinter, Epson
+  TM, Rongta…), then in the print window choose the printer, **Margins: None**,
+  **Scale: 100**, and the paper size of your roll (e.g. 80 × 297 mm or "Roll").
+  Turn off *Headers and footers*.
+- **Android phone (Bluetooth or USB printer):** Android needs a print service for
+  the printer. Install the printer maker's print plugin, or a general one such as
+  **RawBT**, enable it in *Settings > Connected devices > Printing*, then press
+  **طبع الوصل** and choose the printer.
+
+Do a test print once to check the width; if the right side is cut, choose 58 mm.
+
 ## Working without internet
 
 After the app has been opened once with internet on a device, it also works

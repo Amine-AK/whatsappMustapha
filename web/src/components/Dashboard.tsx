@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/client";
 import { dueText, money, searchDigits, STATUS_LABEL } from "@/lib/format";
-import type { LocalCustomer } from "@/lib/offline";
-import type { DueStatus } from "@/lib/sheet-logic";
+import { customerFromInput, inputOf, type LocalCustomer } from "@/lib/offline";
+import { appendPayment, listPayments, type DueStatus } from "@/lib/sheet-logic";
 import { CustomerForm } from "./CustomerForm";
 import { Modal } from "./Modal";
 import { PaymentDialog } from "./PaymentDialog";
+import { ReceiptDialog } from "./ReceiptDialog";
 import { RemindersDialog } from "./RemindersDialog";
 import { SyncBar } from "./SyncBar";
 import { useOfflineCustomers } from "./useOfflineCustomers";
@@ -43,6 +44,7 @@ type Dialog =
   | { kind: "add" }
   | { kind: "edit"; customer: Customer }
   | { kind: "pay"; customer: Customer }
+  | { kind: "receipt"; customer: Customer; notice?: string }
   | { kind: "delete"; customer: Customer }
   | { kind: "remind" }
   | null;
@@ -346,6 +348,15 @@ export function Dashboard() {
                       <button type="button" className="btn" onClick={() => setDialog({ kind: "edit", customer: c })}>
                         تعديل
                       </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => setDialog({ kind: "receipt", customer: c })}
+                        disabled={listPayments(c.advance).length === 0}
+                        aria-label={`وصل الأداء ديال ${c.name}`}
+                      >
+                        وصل
+                      </button>
                       <button type="button" className="btn danger-ghost" onClick={() => setDialog({ kind: "delete", customer: c })}>
                         حذف
                       </button>
@@ -387,12 +398,15 @@ export function Dashboard() {
           today={today}
           onClose={() => setDialog(null)}
           onSubmit={async (p) => {
-            await data.pay(dialog.customer, p);
-            setDialog(null);
-            setToast(`تسجلات الدفعة ديال ${dialog.customer.name}${savedNote}`);
+            const c = dialog.customer;
+            const stamp = await data.pay(c, p);
+            // Open the receipt for this payment right away (it works offline too).
+            const paid = customerFromInput({ ...inputOf(c), advance: appendPayment(c.advance, p.amount, stamp), dueDate: p.nextDueDate }, c.row, today);
+            setDialog({ kind: "receipt", customer: { ...paid, uid: c.uid }, notice: `تسجلات الدفعة ديال ${c.name}${savedNote}` });
           }}
         />
       )}
+      {dialog?.kind === "receipt" && <ReceiptDialog customer={dialog.customer} notice={dialog.notice} onClose={() => setDialog(null)} />}
       {dialog?.kind === "delete" && <DeleteDialog customer={dialog.customer} onClose={() => setDialog(null)} onConfirm={confirmDelete} />}
       {dialog?.kind === "remind" && (
         <RemindersDialog

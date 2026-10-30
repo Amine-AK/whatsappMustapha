@@ -39,7 +39,8 @@ export interface OfflineState {
   refresh: () => Promise<void>;
   add: (input: CustomerInput) => Promise<LocalCustomer>;
   edit: (c: LocalCustomer, input: CustomerInput) => Promise<void>;
-  pay: (c: LocalCustomer, p: PaymentInput) => Promise<void>;
+  /** Returns the payment's time stamp (also printed on the receipt). */
+  pay: (c: LocalCustomer, p: PaymentInput) => Promise<string>;
   remove: (c: LocalCustomer) => Promise<void>;
   retry: (opId: string) => void;
   discard: (opId: string) => void;
@@ -272,7 +273,9 @@ export function useOfflineCustomers(): OfflineState {
       enqueue({ ...base, id: newId(), uid: c.uid, label: input.name, createdAt: new Date().toISOString(), kind: "edit", input: stampInput(input, stamp), stamp });
     },
     pay: async (c, p) => {
-      enqueue({ ...base, id: newId(), uid: c.uid, label: c.name, createdAt: new Date().toISOString(), kind: "pay", ...p, stamp: makeStamp(p.paidDate) });
+      const stamp = makeStamp(p.paidDate);
+      enqueue({ ...base, id: newId(), uid: c.uid, label: c.name, createdAt: new Date().toISOString(), kind: "pay", ...p, stamp });
+      return stamp;
     },
     remove: async (c) => {
       enqueue({ ...base, id: newId(), uid: c.uid, label: c.name, createdAt: new Date().toISOString(), kind: "delete" });

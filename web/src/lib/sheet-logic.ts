@@ -189,6 +189,23 @@ export function appendPayment(advance: string, amount: number, stamp: string): s
   return current && current !== "0" ? `${current} + ${part}` : part;
 }
 
+export interface Payment {
+  amount: number;
+  /** "dd/MM/yyyy - HH:mm", or "" when the payment was typed without a stamp. */
+  stamp: string;
+}
+
+/** The payments listed in column G: "1000 (01/10/2026 - 10:00) + 500 (25/10/2026 - 14:30)". */
+export function listPayments(advance: string): Payment[] {
+  return String(advance ?? "")
+    .split("+")
+    .map((part) => {
+      const stamp = part.match(/\(\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}[^)]*)\)/)?.[1].trim() ?? "";
+      return { amount: parseSum(part), stamp };
+    })
+    .filter((p) => p.amount > 0);
+}
+
 export function dueStatus(dueDate: string, remaining: number, today: string): DueStatus {
   if (remaining <= 0) return "paid";
   if (!dueDate) return "nodate";

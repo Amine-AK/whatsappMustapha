@@ -232,7 +232,7 @@ button, input, select { font: inherit; color: inherit; }
 .card.status-overdue .remaining { color: var(--danger); }
 .card-due { text-align: end; }
 
-.card-actions { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
+.card-actions { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px; }
 .card-actions .btn { padding: 0 8px; }
 
 .empty { text-align: center; padding: 32px 12px; color: var(--muted); }
@@ -372,3 +372,51 @@ input[type="date"] { min-height: 44px; }
 .card-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
 .pending-pill { background: var(--warn-soft); color: var(--warn); }
 .card.is-pending { border-style: dashed; }
+
+/* ---------------------------------------------------------------- payment receipt (thermal printer) */
+
+.receipt-options { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.receipt-options .field { flex: 1 1 180px; }
+.receipt-options .field > span { font-size: 14px; font-weight: 500; }
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.segmented button { min-height: 40px; padding: 0 16px; border: 0; background: var(--surface); cursor: pointer; }
+.segmented button.on { background: var(--ink); color: var(--bg); }
+
+.receipt-preview {
+  display: flex; justify-content: center; padding: 16px 8px; border-radius: 10px;
+  background: var(--surface-2); overflow-x: auto;
+}
+.receipt-preview .ticket { box-shadow: 0 2px 10px rgb(0 0 0 / 18%); }
+
+/* The ticket is paper: black on white in every theme. 80 mm printers print 72 mm wide, 58 mm print 48 mm. */
+.ticket {
+  background: #fff; color: #000; font-family: var(--font);
+  padding: 3mm 2mm 6mm; display: grid; gap: 1.2mm; font-size: 10pt; line-height: 1.35;
+}
+.ticket.w80 { width: 72mm; }
+.ticket.w58 { width: 48mm; font-size: 8.5pt; }
+.ticket p { margin: 0; }
+.ticket hr { border: 0; border-top: 1px dashed #000; margin: 1mm 0; width: 100%; }
+.ticket-head { text-align: center; display: grid; gap: 0.5mm; }
+.ticket-shop { font-size: 1.35em; font-weight: 700; letter-spacing: 0.02em; }
+.ticket-title { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; }
+.ticket-title strong { font-size: 1.15em; }
+.ticket-line { display: flex; justify-content: space-between; gap: 3mm; }
+.ticket-line > span:first-child { flex: none; }
+.ticket-line > span:last-child { text-align: left; overflow-wrap: anywhere; font-weight: 500; }
+.ticket-strong { font-weight: 700; font-size: 1.1em; }
+.ticket-amount { display: grid; justify-items: center; gap: 0.5mm; padding: 1.5mm 0; border: 2px solid #000; border-radius: 2mm; }
+.ticket-amount strong { font-size: 1.7em; }
+.ticket-sign { margin-top: 3mm !important; }
+.ticket-thanks { text-align: center; font-weight: 700; margin-top: 1mm !important; }
+
+#print-root { display: none; }
+
+@media print {
+  @page { margin: 0; }
+  html, body { background: #fff !important; }
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block; }
+  #print-root .ticket { box-shadow: none; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
