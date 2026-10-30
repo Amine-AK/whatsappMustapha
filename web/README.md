@@ -61,13 +61,26 @@ with its date and time. `Feuille 1` is left as it was, as a backup.
 
 ### Excel backup
 
-At the bottom of the home page, **«⬇️ تحميل Excel»** downloads
+In the **⚙️ menu** (top of the page): **«⬇️ تحميل Excel»** downloads
 `electro-lmestour-backup-YYYY-MM-DD.xlsx`: a copy of every tab of the Google
 Sheet (customers, purchases, payments, instalment changes, archive, reminder
 log…), one Excel sheet per tab. Phones stay text (leading 0 kept), amounts
 stay numbers. It needs internet; changes made offline are in it only once
-they have synced. The file can be opened in Excel or LibreOffice, or imported
+they have synced. The file opens in Excel or LibreOffice, or can be imported
 back into Google Sheets (File > Import).
+
+**Daily backup on WhatsApp.** Every 24 hours the app asks to send the file
+to WhatsApp **0662275062** (`BACKUP_PHONE` in `src/lib/backup.ts`); «من بعد»
+asks again 3 hours later. It is also in the menu: «📤 صيفط Excel فواتساب».
+WhatsApp links can't attach a file, so sending takes a tap or two:
+
+- **Phone:** the share menu opens with the file attached; choose WhatsApp,
+  then the chat with 0662275062.
+- **PC:** the file is downloaded and WhatsApp Web opens the chat with
+  0662275062; drop the file in it (📎).
+
+The 24 hours are counted per device (phone and PC each remember their last
+backup).
 
 ### The old Apps Script (code.gs) is no longer used
 

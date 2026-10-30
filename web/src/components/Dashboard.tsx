@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/client";
+import { backupDue } from "@/lib/backup";
 import { dueText, matchesClient, money, STATUS_LABEL } from "@/lib/format";
 import { unpaidItems, type ClientSummary } from "@/lib/ledger";
 import { displayDate, installmentText } from "@/lib/receipt";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { ArchiveView } from "./ArchiveView";
-import { BackupButton } from "./BackupButton";
+import { BackupDialog } from "./BackupDialog";
 import { ClientDetail } from "./ClientDetail";
 import { InstallButton } from "./InstallButton";
 import { NewClientForm } from "./ClientForms";
@@ -16,7 +17,7 @@ import { ReceiptDialog } from "./ReceiptDialog";
 import { RemindersDialog } from "./RemindersDialog";
 import { SetupScreen } from "./SetupScreen";
 import { SyncBar } from "./SyncBar";
-import { ThemeButton } from "./ThemeButton";
+import { TopMenu } from "./TopMenu";
 import { useLedger } from "./useLedger";
 import { Confirm } from "./ui";
 
@@ -54,6 +55,7 @@ type Dialog =
   | { kind: "receipt"; id: string; paymentId?: string; notice?: string }
   | { kind: "remind" }
   | { kind: "archive-all" }
+  | { kind: "backup"; reminder?: boolean }
   | null;
 
 const MAX_CARDS = 200;
@@ -99,6 +101,19 @@ export function Dashboard() {
     };
     return list.sort(sorters[f.sort]);
   }, [summaries, query, filters]);
+
+  // Every 24 hours, ask to send the Excel backup on WhatsApp. Checked when the
+  // app opens, after each window closes, and every 10 minutes while it stays open.
+  const ready = Boolean(data.ledger) && online;
+  useEffect(() => {
+    if (!ready || dialog) return;
+    const check = () => {
+      if (backupDue()) setDialog({ kind: "backup", reminder: true });
+    };
+    check();
+    const timer = setInterval(check, 10 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [ready, dialog]);
 
   const summary = useMemo(() => {
     const owing = summaries.filter((s) => s.remaining > 0);
@@ -149,22 +164,19 @@ export function Dashboard() {
         </div>
         <div className="topbar-actions">
           <InstallButton />
-          <ThemeButton />
           <button type="button" className="btn ghost" onClick={() => void data.refresh()} disabled={!online || data.syncing} aria-label="حدّث من الـ Google Sheet">
             {data.syncing ? "…" : "↻"}
           </button>
-          <button
-            type="button"
-            className="btn ghost"
-            disabled={!online}
-            onClick={async () => {
+          <TopMenu
+            online={online}
+            onToast={setToast}
+            onSendBackup={() => setDialog({ kind: "backup" })}
+            onLogout={async () => {
               if (data.pendingCount > 0 && !window.confirm("مازال كاين تعديلات ما تزامنوش. غادي يبقاو فالتيليفون ويتزامنو ملي تدخل من جديد. نخرج؟")) return;
               await apiFetch("/api/logout", { method: "POST" }).catch(() => {});
               window.location.href = "/login";
             }}
-          >
-            خروج
-          </button>
+          />
         </div>
       </header>
 
@@ -346,8 +358,6 @@ export function Dashboard() {
             )}
           </>
         )}
-
-        {data.ledger && <BackupButton online={online} pending={data.pendingCount} onToast={setToast} />}
       </main>
 
       {dialog?.kind === "add" && (
@@ -371,6 +381,9 @@ export function Dashboard() {
       )}
       {dialog?.kind === "receipt" && find(dialog.id) && (
         <ReceiptDialog summary={find(dialog.id)!} mode="payment" paymentId={dialog.paymentId} notice={dialog.notice} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.kind === "backup" && (
+        <BackupDialog reminder={dialog.reminder} pending={data.pendingCount} onClose={() => setDialog(null)} onToast={setToast} />
       )}
       {dialog?.kind === "remind" && <RemindersDialog onClose={() => setDialog(null)} />}
       {dialog?.kind === "archive-all" && (
