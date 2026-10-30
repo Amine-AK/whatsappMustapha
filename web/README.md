@@ -36,7 +36,7 @@ The app works in these tabs (it creates them; see *First start* below):
 | Tab | One row per |
 |---|---|
 | `الزبناء` | customer: number (C-…), name, phone, instalment, period, next payment date, notes, and the totals bought / paid / remaining (written by the app) |
-| `المشتريات` | purchase: customer, date, item, selling price, buying price |
+| `المشتريات` | purchase: customer, date, item, selling price (the buying price will live in the future stock section) |
 | `الدفعات` | payment: receipt number (P-…), customer, date, time, amount, تسبيق/دفعة, item |
 | `تغييرات الطريطة` | instalment change: old and new amount and period, reason |
 | `أرشيف الزبناء`, `أرشيف المشتريات`, `أرشيف الدفعات` | archived customers and their history |
@@ -62,7 +62,7 @@ with its date and time. `Feuille 1` is left as it was, as a backup.
 ### The old Apps Script (code.gs) is no longer used
 
 The app replaces everything `code.gs` did (menu, WhatsApp links, late list,
-invoice, profit). It was removed from this repository, but it still lives in
+invoice). It was removed from this repository, but it still lives in
 the sheet itself. To stop it:
 
 1. Open the sheet > **Extensions > Apps Script**.
