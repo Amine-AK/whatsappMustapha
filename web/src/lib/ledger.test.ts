@@ -15,7 +15,7 @@ import {
   type Purchase,
 } from "./ledger";
 import { ledgerToRows, migrateOldRows, rowsToLedger, sameRow, TABS } from "./ledger-sheet";
-import { paymentReceipt, statement } from "./receipt";
+import { paymentMessage, paymentReceipt, statement, statementMessage, whatsappLink } from "./receipt";
 
 const T0 = "2026-01-10T10:00:00.000Z";
 let n = 0;
@@ -154,6 +154,24 @@ describe("receipts", () => {
     ]);
     // An older receipt shows the items as they were that day (the washer wasn't bought yet).
     expect(r.unpaid).toEqual([{ date: "10/01/2026", item: "ثلاجة", price: 6000, remaining: 3000 }]);
+  });
+
+  it("prepares the WhatsApp messages with the same content", () => {
+    const s = summarizeClient(example(), client, "2026-04-20");
+    const msg = paymentMessage(paymentReceipt(s, s.payments.find((p) => p.id === "P-PAY00005")!));
+    expect(msg).toContain("توصلنا منكم بـ *1.500 درهم* بتاريخ 15/04/2026 - 10:00 (ماشينة الصابون)");
+    expect(msg).toContain("رقم الوصل: P-PAY00005");
+    expect(msg).toContain("⏳ المتبقي: *2.000 درهم*");
+    expect(msg).toContain("• ثلاجة: باقي 1.000 درهم\n• ماشينة الصابون: باقي 1.000 درهم");
+    expect(msg).toContain("📅 الدفعة المقبلة: 10/05/2026");
+    expect(statementMessage(statement(s, "20/04/2026 - 12:00"))).toContain("• 10/01/2026 ثلاجة: 6.000 درهم (باقي 1.000 درهم)");
+  });
+
+  it("opens the customer's chat with the message typed, only for a usable number", () => {
+    const link = whatsappLink("06 61 23 45 67", "سلام\nشكراً");
+    expect(link).toBe("https://wa.me/212661234567?text=%D8%B3%D9%84%D8%A7%D9%85%0A%D8%B4%D9%83%D8%B1%D8%A7%D9%8B");
+    expect(whatsappLink("123", "x")).toBeNull();
+    expect(whatsappLink("", "x")).toBeNull();
   });
 
   it("lists nothing left to pay once everything is paid", () => {

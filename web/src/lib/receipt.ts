@@ -1,7 +1,8 @@
 // Receipts printed on the thermal printer: one payment (وصل الأداء) or the
 // whole account (كشف الحساب).
 
-import { installmentLine } from "./sheet-logic";
+import { money } from "./format";
+import { formatMoroccoPhone, installmentLine, isValidPhone } from "./sheet-logic";
 import { itemStatuses, sortPayments, type ClientSummary, type Payment } from "./ledger";
 
 export const SHOP = {
@@ -114,4 +115,58 @@ export function statement(s: ClientSummary, printedAt: string, lastPayments = 0)
     installment: s.remaining > 0 ? installmentText(s) : "",
     nextDueDate: s.remaining > 0 ? s.client.nextDueDate : "",
   };
+}
+
+// ---------------------------------------------------------------- WhatsApp (sent by hand)
+
+/** Payment confirmation to paste into WhatsApp: same content as the printed receipt. */
+export function paymentMessage(r: PaymentReceipt): string {
+  const lines = [
+    `السلام عليكم ${r.customer}،`,
+    `توصلنا منكم بـ *${money(r.amount)}* بتاريخ ${r.date}${r.item ? ` (${r.item})` : ""}. شكراً.`,
+    `رقم الوصل: ${r.number}`,
+    "",
+    `💰 مجموع المدفوع: ${money(r.paidToDate)} من ${money(r.total)}`,
+  ];
+  if (r.remaining > 0) {
+    lines.push(`⏳ المتبقي: *${money(r.remaining)}*`);
+    if (r.unpaid.length) {
+      lines.push("", "السلع لي باقي ما تخلصاتش:");
+      for (const i of r.unpaid) lines.push(`• ${i.item}: باقي ${money(i.remaining)}`);
+    }
+    if (r.nextDueDate || r.installment) lines.push("");
+    if (r.nextDueDate) lines.push(`📅 الدفعة المقبلة: ${displayDate(r.nextDueDate)}`);
+    if (r.installment) lines.push(`📌 الطريطة: ${r.installment}`);
+  } else {
+    lines.push("✅ الحساب ديالكم خالص. بارك الله فيكم.");
+  }
+  lines.push("", `${SHOP.name} · ${SHOP.phone}`);
+  return lines.join("\n");
+}
+
+/** Account summary to paste into WhatsApp. */
+export function statementMessage(st: Statement): string {
+  const lines = [`السلام عليكم ${st.customer}،`, `هادا هو الحساب ديالكم عند ${SHOP.name}:`, "", "🛒 المشتريات:"];
+  for (const i of st.items) lines.push(`• ${i.date} ${i.item}: ${money(i.price)}${i.remaining > 0 ? ` (باقي ${money(i.remaining)})` : " ✓"}`);
+  lines.push("", `💰 المجموع: ${money(st.total)}`, `✔️ المدفوع: ${money(st.paid)}`);
+  if (st.remaining > 0) {
+    lines.push(`⏳ المتبقي: *${money(st.remaining)}*`);
+    if (st.nextDueDate) lines.push(`📅 الدفعة المقبلة: ${displayDate(st.nextDueDate)}`);
+    if (st.installment) lines.push(`📌 الطريطة: ${st.installment}`);
+  } else {
+    lines.push("✅ الحساب خالص.");
+  }
+  lines.push("", `${SHOP.name} · ${SHOP.phone}`);
+  return lines.join("\n");
+}
+
+/**
+ * Link that opens WhatsApp (app on the phone, WhatsApp Web / Desktop on a PC)
+ * on this customer's chat with the message already typed. Nothing is sent
+ * until the user presses send. Null when the phone number isn't usable.
+ */
+export function whatsappLink(phone: string, message: string): string | null {
+  const intl = formatMoroccoPhone(phone);
+  if (!isValidPhone(intl)) return null;
+  return `https://wa.me/${intl}?text=${encodeURIComponent(message)}`;
 }
