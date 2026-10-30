@@ -45,10 +45,14 @@ export function ReceiptDialog({ summary, mode: initialMode, paymentId, notice, o
   const [paper, setPaper] = useState<Paper>("80");
   const [short, setShort] = useState(payments.length > SHORT_LIST);
   const [mounted, setMounted] = useState(false);
+  const [waTarget, setWaTarget] = useState<"app" | "web">("app");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setPaper(readPaper());
     setMounted(true);
+    // On a PC, WhatsApp Web keeps the emojis; the Windows app can show them as "�".
+    if (!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) setWaTarget("web");
   }, []);
 
   function choosePaper(p: Paper) {
@@ -68,7 +72,25 @@ export function ReceiptDialog({ summary, mode: initialMode, paymentId, notice, o
         : null;
   // Same content as the ticket, typed into the customer's WhatsApp chat; the user presses send.
   const message = content ? (content.kind === "payment" ? paymentMessage(content.data) : statementMessage(content.data)) : "";
-  const waLink = content ? whatsappLink(summary.client.phone, message) : null;
+  const waLink = content ? whatsappLink(summary.client.phone, message, waTarget) : null;
+
+  async function copyMessage() {
+    try {
+      await navigator.clipboard.writeText(message);
+    } catch {
+      // Older browsers / plain http: copy through a hidden textarea.
+      const area = document.createElement("textarea");
+      area.value = message;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
     <>
@@ -147,6 +169,10 @@ export function ReceiptDialog({ summary, mode: initialMode, paymentId, notice, o
           <details className="wa-preview">
             <summary>الرسالة لي غادي توجد فواتساب</summary>
             <pre dir="rtl">{message}</pre>
+            <button type="button" className="btn small" onClick={copyMessage}>
+              {copied ? "✅ تنسخات" : "📋 نسخ الرسالة"}
+            </button>
+            <p className="muted small">إلا بانو الإيموجي «�» فواتساب، نسخ الرسالة ولصقها فالمحادثة.</p>
           </details>
         )}
       </Modal>

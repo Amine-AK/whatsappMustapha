@@ -118,55 +118,59 @@ export function statement(s: ClientSummary, printedAt: string, lastPayments = 0)
 }
 
 // ---------------------------------------------------------------- WhatsApp (sent by hand)
+// Standard emojis that every WhatsApp shows; *text* is bold in WhatsApp.
 
-/** Payment confirmation to paste into WhatsApp: same content as the printed receipt. */
+/** Payment confirmation to send on WhatsApp: same content as the printed receipt. */
 export function paymentMessage(r: PaymentReceipt): string {
   const lines = [
-    `السلام عليكم ${r.customer}،`,
-    `توصلنا منكم بـ *${money(r.amount)}* بتاريخ ${r.date}${r.item ? ` (${r.item})` : ""}. شكراً.`,
-    `رقم الوصل: ${r.number}`,
+    `السلام عليكم ${r.customer} 👋`,
+    `✅ توصلنا منكم بـ *${money(r.amount)}* بتاريخ ${r.date}${r.item ? ` (${r.item})` : ""}. شكراً.`,
+    `🧾 رقم الوصل: ${r.number}`,
     "",
     `💰 مجموع المدفوع: ${money(r.paidToDate)} من ${money(r.total)}`,
   ];
   if (r.remaining > 0) {
     lines.push(`⏳ المتبقي: *${money(r.remaining)}*`);
     if (r.unpaid.length) {
-      lines.push("", "السلع لي باقي ما تخلصاتش:");
-      for (const i of r.unpaid) lines.push(`• ${i.item}: باقي ${money(i.remaining)}`);
+      lines.push("", "📦 السلع لي باقي ما تخلصاتش:");
+      for (const i of r.unpaid) lines.push(`▪️ ${i.item}: باقي ${money(i.remaining)}`);
     }
     if (r.nextDueDate || r.installment) lines.push("");
     if (r.nextDueDate) lines.push(`📅 الدفعة المقبلة: ${displayDate(r.nextDueDate)}`);
-    if (r.installment) lines.push(`📌 الطريطة: ${r.installment}`);
+    if (r.installment) lines.push(`🔁 الطريطة: ${r.installment}`);
   } else {
-    lines.push("✅ الحساب ديالكم خالص. بارك الله فيكم.");
+    lines.push("🎉 الحساب ديالكم خالص. بارك الله فيكم.");
   }
-  lines.push("", `${SHOP.name} · ${SHOP.phone}`);
+  lines.push("", `🏪 ${SHOP.name}`, `📞 ${SHOP.phone}`);
   return lines.join("\n");
 }
 
-/** Account summary to paste into WhatsApp. */
+/** Account summary to send on WhatsApp. */
 export function statementMessage(st: Statement): string {
-  const lines = [`السلام عليكم ${st.customer}،`, `هادا هو الحساب ديالكم عند ${SHOP.name}:`, "", "🛒 المشتريات:"];
-  for (const i of st.items) lines.push(`• ${i.date} ${i.item}: ${money(i.price)}${i.remaining > 0 ? ` (باقي ${money(i.remaining)})` : " ✓"}`);
-  lines.push("", `💰 المجموع: ${money(st.total)}`, `✔️ المدفوع: ${money(st.paid)}`);
+  const lines = [`السلام عليكم ${st.customer} 👋`, `📋 هادا هو الحساب ديالكم عند ${SHOP.name}:`, "", "🛒 المشتريات:"];
+  for (const i of st.items) lines.push(`▪️ ${i.date} ${i.item}: ${money(i.price)}${i.remaining > 0 ? ` (باقي ${money(i.remaining)})` : " ✅"}`);
+  lines.push("", `💰 المجموع: ${money(st.total)}`, `💵 المدفوع: ${money(st.paid)}`);
   if (st.remaining > 0) {
     lines.push(`⏳ المتبقي: *${money(st.remaining)}*`);
     if (st.nextDueDate) lines.push(`📅 الدفعة المقبلة: ${displayDate(st.nextDueDate)}`);
-    if (st.installment) lines.push(`📌 الطريطة: ${st.installment}`);
+    if (st.installment) lines.push(`🔁 الطريطة: ${st.installment}`);
   } else {
-    lines.push("✅ الحساب خالص.");
+    lines.push("🎉 الحساب خالص.");
   }
-  lines.push("", `${SHOP.name} · ${SHOP.phone}`);
+  lines.push("", `🏪 ${SHOP.name}`, `📞 ${SHOP.phone}`);
   return lines.join("\n");
 }
 
 /**
- * Link that opens WhatsApp (app on the phone, WhatsApp Web / Desktop on a PC)
- * on this customer's chat with the message already typed. Nothing is sent
- * until the user presses send. Null when the phone number isn't usable.
+ * Link that opens the customer's chat with the message already typed; nothing
+ * is sent until the user presses send. Null when the phone number isn't usable.
+ * - "app": api.whatsapp.com, opens the WhatsApp app (phones).
+ * - "web": web.whatsapp.com in the browser (PCs). Handing the text to the
+ *   WhatsApp Desktop app on Windows can turn emojis into "�"; the browser keeps them.
  */
-export function whatsappLink(phone: string, message: string): string | null {
+export function whatsappLink(phone: string, message: string, target: "app" | "web" = "app"): string | null {
   const intl = formatMoroccoPhone(phone);
   if (!isValidPhone(intl)) return null;
-  return `https://wa.me/${intl}?text=${encodeURIComponent(message)}`;
+  const host = target === "web" ? "https://web.whatsapp.com/send" : "https://api.whatsapp.com/send";
+  return `${host}?phone=${intl}&text=${encodeURIComponent(message)}`;
 }
