@@ -262,7 +262,7 @@ button, input, select { font: inherit; color: inherit; }
 .modal-inner { display: flex; flex-direction: column; max-height: calc(100dvh - 24px); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
 .modal-head h2 { font-size: 18px; overflow-wrap: anywhere; }
-.modal-body { padding: 16px; overflow-y: auto; display: grid; gap: 14px; }
+.modal-body { padding: 16px; overflow-y: auto; display: grid; gap: 14px; grid-auto-rows: max-content; flex: 1 1 auto; min-height: 0; }
 .modal-foot { display: flex; gap: 10px; justify-content: flex-start; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
 .modal-foot .btn { flex: 1; }
 
@@ -489,3 +489,12 @@ input[type="date"] { min-height: 44px; }
 .ticket-table td + td { padding-inline-start: 2.5mm; }
 .ticket-table .t-num { text-align: left; white-space: nowrap; font-weight: 500; padding-inline-start: 2mm; }
 .t-sub { display: block; font-size: 0.85em; }
+
+/* WhatsApp message preview in the receipt window */
+a.btn { text-decoration: none; }
+.wa-preview { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+.wa-preview summary { cursor: pointer; color: var(--whatsapp); font-weight: 500; }
+.wa-preview pre {
+  margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--font); font-size: 14px; line-height: 1.6;
+}

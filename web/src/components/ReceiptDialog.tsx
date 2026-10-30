@@ -4,7 +4,17 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { money } from "@/lib/format";
 import { nowParts, sortPayments, type ClientSummary } from "@/lib/ledger";
-import { displayDateTime, paymentReceipt, SHOP, statement, type PaymentReceipt, type Statement } from "@/lib/receipt";
+import {
+  displayDateTime,
+  paymentMessage,
+  paymentReceipt,
+  SHOP,
+  statement,
+  statementMessage,
+  whatsappLink,
+  type PaymentReceipt,
+  type Statement,
+} from "@/lib/receipt";
 import { Modal } from "./Modal";
 
 type Paper = "58" | "80";
@@ -56,6 +66,9 @@ export function ReceiptDialog({ summary, mode: initialMode, paymentId, notice, o
       : payment
         ? { kind: "payment" as const, data: paymentReceipt(summary, payment) }
         : null;
+  // Same content as the ticket, typed into the customer's WhatsApp chat; the user presses send.
+  const message = content ? (content.kind === "payment" ? paymentMessage(content.data) : statementMessage(content.data)) : "";
+  const waLink = content ? whatsappLink(summary.client.phone, message) : null;
 
   return (
     <>
@@ -67,6 +80,15 @@ export function ReceiptDialog({ summary, mode: initialMode, paymentId, notice, o
             <button type="button" className="btn" onClick={onClose}>
               سد
             </button>
+            {waLink ? (
+              <a className="btn whatsapp" href={waLink} target="_blank" rel="noopener noreferrer">
+                واتساب
+              </a>
+            ) : (
+              <button type="button" className="btn whatsapp" disabled title="رقم الهاتف غير صحيح">
+                واتساب
+              </button>
+            )}
             <button type="button" className="btn primary" onClick={() => window.print()} disabled={!content}>
               🖨️ طبع
             </button>
@@ -74,6 +96,7 @@ export function ReceiptDialog({ summary, mode: initialMode, paymentId, notice, o
         }
       >
         {notice && <p className="alert info">{notice}</p>}
+        {content && !waLink && <p className="alert warn">رقم الهاتف ديال هاد الزبون غير صحيح ولا خاوي. صلحو فـ «تعديل المعلومات» باش تصيفط الوصل فواتساب.</p>}
         <div className="segmented wide-seg" role="group" aria-label="نوع الوصل">
           <button type="button" className={mode === "payment" ? "on" : ""} aria-pressed={mode === "payment"} onClick={() => setMode("payment")} disabled={!payments.length}>
             وصل دفعة
@@ -119,6 +142,12 @@ export function ReceiptDialog({ summary, mode: initialMode, paymentId, notice, o
           <div className="receipt-preview">
             <Ticket content={content} paper={paper} />
           </div>
+        )}
+        {content && waLink && (
+          <details className="wa-preview">
+            <summary>الرسالة لي غادي توجد فواتساب</summary>
+            <pre dir="rtl">{message}</pre>
+          </details>
         )}
       </Modal>
       {/* Printed copy: the only thing on the page when printing. */}
