@@ -147,6 +147,19 @@ describe("receipts", () => {
     expect(r).toMatchObject({ number: "P-PAY00002", date: "10/02/2026 - 10:00", amount: 1000, total: 6000, paidToDate: 3000, remaining: 3000, nextDueDate: "" });
     const last = paymentReceipt(s, s.payments.find((p) => p.id === "P-PAY00005")!);
     expect(last).toMatchObject({ item: "ماشينة الصابون", label: "تسبيق", total: 8500, paidToDate: 6500, remaining: 2000, nextDueDate: "2026-05-10" });
+    // Every item not fully paid yet, with what is left on it.
+    expect(last.unpaid).toEqual([
+      { date: "10/01/2026", item: "ثلاجة", price: 6000, remaining: 1000 },
+      { date: "15/04/2026", item: "ماشينة الصابون", price: 2500, remaining: 1000 },
+    ]);
+    // An older receipt shows the items as they were that day (the washer wasn't bought yet).
+    expect(r.unpaid).toEqual([{ date: "10/01/2026", item: "ثلاجة", price: 6000, remaining: 3000 }]);
+  });
+
+  it("lists nothing left to pay once everything is paid", () => {
+    const l = applyOp(example(), op({ type: "payment.add", payment: pay("P-PAY00007", "2026-05-10", 2000) })).ledger;
+    const s = summarizeClient(l, client, "2026-05-10");
+    expect(paymentReceipt(s, s.payments.find((p) => p.id === "P-PAY00007")!).unpaid).toEqual([]);
   });
 
   it("prints the whole account, optionally only the last payments", () => {

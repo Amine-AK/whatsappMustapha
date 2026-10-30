@@ -2,7 +2,7 @@
 // whole account (كشف الحساب).
 
 import { installmentLine } from "./sheet-logic";
-import { sortPayments, type ClientSummary, type Payment } from "./ledger";
+import { itemStatuses, sortPayments, type ClientSummary, type Payment } from "./ledger";
 
 export const SHOP = {
   name: "ELECTRO-LMESTOUR",
@@ -43,6 +43,8 @@ export interface PaymentReceipt {
   /** Only on the latest payment. */
   nextDueDate: string;
   installment: string;
+  /** Items not fully paid right after this payment, with what is left on each. */
+  unpaid: { date: string; item: string; price: number; remaining: number }[];
 }
 
 /** Receipt for one payment, with the account as it was right after it. */
@@ -51,7 +53,8 @@ export function paymentReceipt(s: ClientSummary, payment: Payment): PaymentRecei
   const index = ordered.findIndex((p) => p.id === payment.id);
   const upTo = index === -1 ? [...ordered, payment] : ordered.slice(0, index + 1);
   const paidToDate = upTo.reduce((sum, p) => sum + p.amount, 0);
-  const total = s.purchases.filter((p) => p.date <= payment.date).reduce((sum, p) => sum + p.price, 0);
+  const bought = s.purchases.filter((p) => p.date <= payment.date);
+  const total = bought.reduce((sum, p) => sum + p.price, 0);
   const remaining = Math.max(0, Math.round((total - paidToDate) * 100) / 100);
   const latest = index === ordered.length - 1 || index === -1;
   return {
@@ -68,6 +71,9 @@ export function paymentReceipt(s: ClientSummary, payment: Payment): PaymentRecei
     remaining,
     nextDueDate: latest && remaining > 0 ? s.client.nextDueDate : "",
     installment: remaining > 0 ? installmentText(s) : "",
+    unpaid: itemStatuses(bought, upTo)
+      .filter((i) => i.remaining > 0)
+      .map((i) => ({ date: displayDate(i.purchase.date), item: i.purchase.item, price: i.purchase.price, remaining: i.remaining })),
   };
 }
 
