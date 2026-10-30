@@ -59,6 +59,16 @@ the old `Feuille 1` (one row per customer, items and payments joined with `+`):
 each item becomes a purchase with its date and price, each payment a payment
 with its date and time. `Feuille 1` is left as it was, as a backup.
 
+### Excel backup
+
+At the bottom of the home page, **«⬇️ تحميل Excel»** downloads
+`electro-lmestour-backup-YYYY-MM-DD.xlsx`: a copy of every tab of the Google
+Sheet (customers, purchases, payments, instalment changes, archive, reminder
+log…), one Excel sheet per tab. Phones stay text (leading 0 kept), amounts
+stay numbers. It needs internet; changes made offline are in it only once
+they have synced. The file can be opened in Excel or LibreOffice, or imported
+back into Google Sheets (File > Import).
+
 ### The old Apps Script (code.gs) is no longer used
 
 The app replaces everything `code.gs` did (menu, WhatsApp links, late list,

@@ -121,6 +121,20 @@ export async function readTables(titles: string[], formatted = false): Promise<R
   return out;
 }
 
+/** Every row of every tab, header included, in one request (for the Excel backup). */
+export async function readAllTabs(): Promise<{ title: string; rows: unknown[][] }[]> {
+  const tabs = await listTabs(true);
+  if (!tabs.length) return [];
+  const data = await api<{ valueRanges?: { values?: unknown[][] }[] }>("/values:batchGet", {
+    query: {
+      ranges: tabs.map((t) => a1(t.title, "A1:ZZ")),
+      valueRenderOption: "UNFORMATTED_VALUE",
+      dateTimeRenderOption: "FORMATTED_STRING",
+    },
+  });
+  return tabs.map((t, i) => ({ title: t.title, rows: data.valueRanges?.[i]?.values ?? [] }));
+}
+
 /** Column A (ids) from row 2 of several tabs: index i is sheet row i + 2. */
 export async function readIds(titles: string[]): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = Object.fromEntries(titles.map((t) => [t, []]));

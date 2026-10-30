@@ -7,6 +7,7 @@ import { unpaidItems, type ClientSummary } from "@/lib/ledger";
 import { displayDate, installmentText } from "@/lib/receipt";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { ArchiveView } from "./ArchiveView";
+import { BackupButton } from "./BackupButton";
 import { ClientDetail } from "./ClientDetail";
 import { InstallButton } from "./InstallButton";
 import { NewClientForm } from "./ClientForms";
@@ -343,6 +344,8 @@ export function Dashboard() {
             )}
           </>
         )}
+
+        {data.ledger && <BackupButton online={online} pending={data.pendingCount} onToast={setToast} />}
       </main>
 
       {dialog?.kind === "add" && (
