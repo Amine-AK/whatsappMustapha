@@ -117,6 +117,13 @@ was set up before them):
   cost and profit are shown, and a price under cost is refused. «شراء جديد» in a
   customer's account uses the same form, so every sale is in the reports.
   A cash sale prints a «وصل البيع» ticket.
+- **📷 Scanning (QR / barcode):** «📷 سكاني» in المخزون opens the camera. A
+  code already in stock asks how many arrived (+1); a new code opens «سلعة
+  جديدة» with it filled in. 📷 in the البيع search bar puts the scanned product
+  in the sale. The code is kept in the «الباركود / IMEI» column. The camera
+  reader works in Chrome on Android (and Edge / Samsung Internet); elsewhere
+  (iPhone, most PCs) the code can be typed. USB / Bluetooth barcode scanners
+  work everywhere: they type the code and Enter.
 - **المخزون (stock):** a sale takes the product out of stock; cancelling it
   (in التقارير) puts it back. Quantity changes by hand are differences
   (+3 delivered, −1 lost), so counts from two phones add up, and each one is

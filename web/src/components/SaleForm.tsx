@@ -13,7 +13,8 @@ import {
   type StockItem,
 } from "@/lib/ledger";
 import { formatMoroccoPhone, isManualPeriod, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
-import { categoryIcon, currentSeller, marginCheck, round2, searchStock } from "@/lib/shop";
+import { categoryIcon, currentSeller, findByCode, marginCheck, round2, searchStock } from "@/lib/shop";
+import { BarcodeScanner } from "./BarcodeScanner";
 import type { LedgerState } from "./useLedger";
 import { ClientPicker, Field, parseAmount } from "./ui";
 
@@ -78,6 +79,7 @@ export function SaleForm({
   // First instalment, for a customer who doesn't have one yet.
   const [inst, setInst] = useState({ amount: "", period: "شهر", next: "", nextTouched: false });
   const [open, setOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const results = useMemo(
@@ -275,6 +277,7 @@ export function SaleForm({
   }
 
   return (
+    <>
     <form className="sale-form" onSubmit={submit} noValidate>
       {!lockedClientId && (
         <div className="segmented wide-seg sale-type" role="group" aria-label="نوع البيع">
@@ -337,6 +340,7 @@ export function SaleForm({
         <label className="visually-hidden" htmlFor="sale-search">
           قلب على سلعة
         </label>
+        <div className="code-row">
         <input
           ref={searchRef}
           id="sale-search"
@@ -361,10 +365,17 @@ export function SaleForm({
             }
             if (e.key !== "Enter") return;
             e.preventDefault();
-            if (shown[0]) addStock(shown[0]);
+            // A USB / Bluetooth scanner types the code then Enter.
+            const byCode = findByCode(ledger.stock, query);
+            if (byCode) addStock(byCode);
+            else if (shown[0]) addStock(shown[0]);
             else if (query.trim()) addFree(query.trim());
           }}
         />
+          <button type="button" className="btn scan-btn" onClick={() => setScanning(true)} aria-label="سكاني الكود بالكاميرا">
+            📷
+          </button>
+        </div>
         {listOpen && (
           // Keep the focus in the input while tapping a result.
           <ul id="sale-results" className="product-results" role="listbox" aria-label="السلع" onPointerDown={(e) => e.preventDefault()}>
@@ -581,5 +592,19 @@ export function SaleForm({
         </button>
       </div>
     </form>
+    {scanning && (
+      <BarcodeScanner
+        title="📷 سكاني السلعة"
+        onClose={() => setScanning(false)}
+        onResult={(code) => {
+          setScanning(false);
+          const found = findByCode(ledger.stock, code);
+          if (found) return addStock(found);
+          setQuery(code);
+          setError(`ما لقيناش الكود «${code}» فالمخزون. اختار السلعة ولا زيدها فالمخزون.`);
+        }}
+      />
+    )}
+    </>
   );
 }

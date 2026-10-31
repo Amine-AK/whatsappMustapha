@@ -59,6 +59,17 @@ export function searchStock(stock: StockItem[], query: string, limit = 8): Stock
     .map((x) => x.item);
 }
 
+/**
+ * The product with exactly this code (barcode, QR or IMEI, kept in the serial
+ * column). Several cards may share a barcode: one still in stock comes first.
+ */
+export function findByCode(stock: StockItem[], code: string): StockItem | undefined {
+  const c = code.trim().toLowerCase();
+  if (!c) return undefined;
+  const same = stock.filter((s) => s.serial.trim().toLowerCase() === c);
+  return same.find((s) => s.quantity > 0) ?? same[0];
+}
+
 /** Icon of a product family, for the big buttons of the sale screen. */
 export function categoryIcon(name: string): string {
   const n = normalizeText(name);
