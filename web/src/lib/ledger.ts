@@ -220,7 +220,8 @@ export const isLedgerId = (s: unknown): s is string => typeof s === "string" && 
 type OpBody =
   | { type: "client.add"; client: Client }
   | { type: "client.update"; id: string; base: string; patch: Partial<Pick<Client, "name" | "phone" | "notes" | "nextDueDate">> }
-  | { type: "client.delete"; id: string }
+  /** withHistory: also delete their purchases, payments and instalment changes (their sales are cancelled). */
+  | { type: "client.delete"; id: string; withHistory?: boolean }
   | { type: "client.installment"; id: string; base: string; change: InstallmentChange; nextDueDate?: string }
   | { type: "purchase.add"; purchase: Purchase }
   | { type: "purchase.update"; id: string; base: string; patch: Partial<Pick<Purchase, "date" | "item" | "price" | "notes">> }
@@ -367,10 +368,25 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
     }
     case "client.delete": {
       if (!findClient(op.id)) return { ledger, result: "already" };
-      if (ledger.purchases.some((p) => p.clientId === op.id) || ledger.payments.some((p) => p.clientId === op.id)) {
+      const hasHistory = ledger.purchases.some((p) => p.clientId === op.id) || ledger.payments.some((p) => p.clientId === op.id);
+      if (hasHistory && op.withHistory !== true) {
         return invalid(ledger, "هاد الزبون عندو مشتريات ولا دفعات. ما يمكنش يتمسح، أرشفه ملي يخلص.");
       }
-      return { ledger: { ...ledger, clients: ledger.clients.filter((c) => c.id !== op.id) }, result: "ok" };
+      // Everything of this customer goes; their credit sales are cancelled and the products go back to stock.
+      const purchaseIds = new Set(ledger.purchases.filter((p) => p.clientId === op.id).map((p) => p.id));
+      const cancelled = ledger.sales.filter((s) => s.clientId === op.id || purchaseIds.has(s.purchaseId));
+      const cancelledIds = new Set(cancelled.map((s) => s.id));
+      return {
+        ledger: {
+          ...restock(ledger, cancelled, op.at),
+          clients: ledger.clients.filter((c) => c.id !== op.id),
+          purchases: ledger.purchases.filter((p) => p.clientId !== op.id),
+          payments: ledger.payments.filter((p) => p.clientId !== op.id),
+          changes: ledger.changes.filter((x) => x.clientId !== op.id),
+          sales: ledger.sales.filter((s) => !cancelledIds.has(s.id)),
+        },
+        result: "ok",
+      };
     }
     case "client.installment": {
       const c = findClient(op.id);

@@ -836,3 +836,13 @@ a.btn { text-decoration: none; }
 .cat-list-icon { font-size: 26px; width: 40px; text-align: center; flex: none; }
 .cat-img.cat-list-icon { width: 40px; height: 40px; }
 .cat-list-name { display: grid; flex: 1; min-width: 0; }
+
+/* ---------------------------------------------------------------- small red delete button (client account) */
+
+.delete-mini {
+  margin-inline-start: auto; min-height: 30px; padding: 2px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent); background: var(--danger-soft); color: var(--danger);
+  font-size: 13px; font-weight: 500;
+}
+.delete-mini:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.delete-mini:disabled { opacity: 0.5; cursor: not-allowed; }

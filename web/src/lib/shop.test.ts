@@ -164,6 +164,22 @@ describe("cash drawer and reports", () => {
   });
 });
 
+describe("deleting a customer", () => {
+  it("with purchases and payments only when asked, and then everything of theirs goes", () => {
+    const p: Purchase = { id: "S-PHONE001", clientId: "C-KARIM001", date: "2026-10-20", item: "iPhone 11 64GB", price: 2500, notes: "", createdAt: AT, updatedAt: AT };
+    let l = run(shop(), { type: "sale.add", lines: [line({ type: "كريدي", clientId: "C-KARIM001", purchaseId: p.id })], purchases: [p] });
+    l = run(l, { type: "payment.add", payment: { id: "P-ADV00001", clientId: "C-KARIM001", purchaseId: p.id, date: "2026-10-20", time: "10:00", amount: 1000, kind: "تسبيق", notes: "", createdAt: AT, updatedAt: AT } });
+    l = run(l, { type: "sale.add", lines: [line({ id: "V-CASH0001", ticket: "V-CASH0001", stockId: "I-CHARGER1", item: "شارجور", buyPrice: 20, listPrice: 50, sellPrice: 50 })], purchases: [] });
+    expect(applyOp(l, op({ type: "client.delete", id: "C-KARIM001" })).result).toBe("invalid");
+    l = run(l, { type: "client.delete", id: "C-KARIM001", withHistory: true });
+    expect([l.clients.length, l.purchases.length, l.payments.length]).toEqual([0, 0, 0]);
+    // Their credit sale is cancelled (phone back in stock); other customers' cash sales stay.
+    expect(l.sales.map((s) => s.id)).toEqual(["V-CASH0001"]);
+    expect(l.stock.find((x) => x.id === "I-IPHONE11")!.quantity).toBe(3);
+    expect(applyOp(l, op({ type: "client.delete", id: "C-KARIM001", withHistory: true })).result).toBe("already");
+  });
+});
+
 describe("family icons", () => {
   it("keeps an emoji or a small picture, refuses anything else", () => {
     const save = (icon: string) => applyOp(emptyLedger(), op({ type: "category.save", category: { name: "تلفزات", description: "", marginTarget: 0, icon } }));
