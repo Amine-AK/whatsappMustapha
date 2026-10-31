@@ -631,7 +631,8 @@ a.btn { text-decoration: none; }
 /* ---------------------------------------------------------------- shop: sale */
 
 .sell-view { display: grid; }
-.sale-form { display: grid; gap: 12px; }
+.sale-form { display: grid; gap: 12px; min-width: 0; }
+.sale-form > *, .modal-body > * { min-width: 0; }
 .sale-type button { font-size: 16px; min-height: 46px; }
 .product-search { position: relative; }
 .product-results {
@@ -682,7 +683,8 @@ a.btn { text-decoration: none; }
 .given { display: flex; align-items: center; gap: 6px; margin-inline-start: auto; }
 .given input, .seller input { width: 110px; min-height: 38px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .seller { display: flex; align-items: center; gap: 6px; }
-.seller input { width: auto; flex: 1; }
+.seller input { width: auto; flex: 1; min-width: 0; }
+.checkout > * { min-width: 0; }
 .checkout .btn { min-height: 50px; font-size: 16px; }
 .modal .checkout { position: static; box-shadow: none; margin: 0; }
 
@@ -763,6 +765,16 @@ a.btn { text-decoration: none; }
   .views button { flex-direction: column; gap: 0; min-height: 52px; padding: 2px 0; font-size: 12px; border-radius: 10px; }
   .views button span:first-child { font-size: 20px; line-height: 1.2; }
   .views button.on { box-shadow: none; }
-  .checkout { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); margin-inline: -16px; border-radius: 0; }
+  .sell-view .checkout { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); margin-inline: -16px; border-radius: 0; }
   .views + .content { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* ---------------------------------------------------------------- new customer steps */
+
+.form-grid.one-col { grid-template-columns: 1fr; }
+.done-step { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 16px 0; }
+.done-check { font-size: 44px; line-height: 1; }
+.done-question { font-size: 18px; font-weight: 700; }
+.pr-hint { padding: 6px 10px 2px; }
+.form-section-title { font-weight: 700; font-size: 15px; }
+.first-instalment { display: grid; gap: 10px; }

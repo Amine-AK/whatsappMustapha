@@ -133,6 +133,13 @@ was set up before them):
 
 The seller's name is remembered on each phone and saved with every sale.
 
+**New customer (+ زبون جديد)** takes 3 short steps: name and phone only →
+«واش بغيتي تزيد ليه بيعة دابا؟» → the sale, for that customer, from one input:
+tap it to see what is in stock (best sellers first) or type to search. A
+customer without an instalment gets one with their first sale (amount suggested
+over ~10 months, period, next due date). «لا، من بعد» opens the customer's
+account; until they buy something they are under «الكل».
+
 ## 1. Google Sheets access (once)
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/) and create a

@@ -2,9 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 import { money } from "@/lib/format";
-import { monthsToFinish, newLedgerId, nowParts, type Client, type ClientSummary, type Payment, type Purchase } from "@/lib/ledger";
-import { formatMoroccoPhone, isISODate, isManualPeriod, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
+import { monthsToFinish, newLedgerId, nowParts, type Client, type ClientSummary } from "@/lib/ledger";
+import { formatMoroccoPhone, isValidPhone, PERIODS } from "@/lib/sheet-logic";
 import { Modal } from "./Modal";
+import { SaleForm } from "./SaleForm";
 import type { LedgerState } from "./useLedger";
 import { ChangeList, diff, Field, parseAmount } from "./ui";
 
@@ -30,6 +31,10 @@ function phoneError(phone: string): string {
 
 // ---------------------------------------------------------------- new customer
 
+/**
+ * New customer in 3 short steps: name + phone → "add a sale now?" → the sale
+ * (same form as the البيع tab, credit for this customer, with the instalment).
+ */
 export function NewClientForm({
   data,
   onClose,
@@ -39,96 +44,77 @@ export function NewClientForm({
   onClose: () => void;
   onDone: (clientId: string, paymentId?: string) => void;
 }) {
-  const today = data.today;
-  const [v, setV] = useState({
-    name: "",
-    phone: "",
-    notes: "",
-    item: "",
-    price: "",
-    date: today,
-    advance: "",
-    installment: "",
-    period: "شهر",
-    nextDueDate: nextDateForPeriod("شهر", today),
-  });
+  const [v, setV] = useState({ name: "", phone: "" });
   const [errors, setErrors] = useState<Errors>({});
+  const [step, setStep] = useState<"info" | "ask" | "sale">("info");
+  const [client, setClient] = useState<Client | null>(null);
   const set = (k: keyof typeof v) => (value: string) => {
-    setV((old) => {
-      const next = { ...old, [k]: value };
-      if (k === "period" && !isManualPeriod(value)) next.nextDueDate = nextDateForPeriod(value, old.date || today) || old.nextDueDate;
-      return next;
-    });
+    setV((old) => ({ ...old, [k]: value }));
     setErrors((e) => ({ ...e, [k]: "" }));
   };
 
   const samePhone = v.phone.trim() && isValidPhone(formatMoroccoPhone(v.phone))
     ? data.summaries.find((s) => formatMoroccoPhone(s.client.phone) === formatMoroccoPhone(v.phone))
     : undefined;
-  const price = parseAmount(v.price || "0");
-  const advance = parseAmount(v.advance || "0");
-  const remaining = (price || 0) - (advance || 0);
 
   function submit(e: FormEvent) {
     e.preventDefault();
     const err: Errors = {};
     if (!v.name.trim()) err.name = "الاسم ضروري";
     if (phoneError(v.phone)) err.phone = phoneError(v.phone);
-    if (v.item.trim() && !(price > 0)) err.price = "ثمن البيع ضروري";
-    if (!v.item.trim() && v.price) err.item = "السلعة ضرورية";
-    if (v.advance && !(advance >= 0)) err.advance = "المبلغ غير صحيح";
-    if (advance > price) err.advance = "التسبيق كبر من الثمن";
-    if (v.installment && !(parseAmount(v.installment) >= 0)) err.installment = "المبلغ غير صحيح";
-    if (!isISODate(v.date)) err.date = "التاريخ ضروري";
     setErrors(err);
     const first = Object.keys(err)[0];
     if (first) return document.getElementById(`n-${first}`)?.focus();
-
     const at = new Date().toISOString();
-    const client: Client = {
-      id: newLedgerId("C"),
-      name: v.name.trim(),
-      phone: v.phone.trim(),
-      installment: parseAmount(v.installment || "0") || 0,
-      period: v.period,
-      nextDueDate: v.nextDueDate,
-      notes: v.notes.trim(),
-      createdAt: at,
-      updatedAt: at,
-    };
-    const ops: Parameters<LedgerState["run"]>[1][] = [{ type: "client.add", client }];
-    let paymentId: string | undefined;
-    if (v.item.trim()) {
-      const purchase: Purchase = {
-        id: newLedgerId("S"),
-        clientId: client.id,
-        date: v.date,
-        item: v.item.trim(),
-        price,
-        notes: "",
-        createdAt: at,
-        updatedAt: at,
-      };
-      ops.push({ type: "purchase.add", purchase });
-      if (advance > 0) {
-        const payment: Payment = {
-          id: newLedgerId("P"),
-          clientId: client.id,
-          purchaseId: purchase.id,
-          date: v.date,
-          time: nowParts().time,
-          amount: advance,
-          kind: "تسبيق",
-          notes: "",
-          createdAt: at,
-          updatedAt: at,
-        };
-        paymentId = payment.id;
-        ops.push({ type: "payment.add", payment });
-      }
-    }
-    data.run(`زبون جديد · ${client.name}`, ...ops);
-    onDone(client.id, paymentId);
+    // The instalment is set with the first sale.
+    const c: Client = { id: newLedgerId("C"), name: v.name.trim(), phone: v.phone.trim(), installment: 0, period: "شهر", nextDueDate: "", notes: "", createdAt: at, updatedAt: at };
+    data.run(`زبون جديد · ${c.name}`, { type: "client.add", client: c });
+    setClient(c);
+    setStep("ask");
+  }
+
+  if (step === "sale" && client) {
+    return (
+      <Modal title={`بيعة لـ ${client.name}`} onClose={() => onDone(client.id)}>
+        <SaleForm data={data} lockedClientId={client.id} onDone={(done) => onDone(client.id, done.paymentId)} />
+      </Modal>
+    );
+  }
+
+  if (step === "ask" && client) {
+    return (
+      <Modal
+        title="زبون جديد"
+        onClose={() => onDone(client.id)}
+        footer={
+          <>
+            <button type="button" className="btn" onClick={() => onDone(client.id)}>
+              لا، من بعد
+            </button>
+            <button type="button" className="btn primary" onClick={() => setStep("sale")} autoFocus>
+              🛒 إيه، زيد بيعة
+            </button>
+          </>
+        }
+      >
+        <div className="done-step">
+          <p className="done-check" aria-hidden="true">
+            ✅
+          </p>
+          <p className="lead">
+            تزاد <strong>{client.name}</strong>
+            {client.phone && (
+              <>
+                {" "}
+                · <bdi dir="ltr">{client.phone}</bdi>
+              </>
+            )}
+          </p>
+          <p className="done-question">واش بغيتي تزيد ليه بيعة دابا؟</p>
+          <p className="muted small">إلا ما شرا والو دابا، غادي تلقاه فـ «الكل» حتى يشري شي حاجة.</p>
+        </div>
+      </Modal>
+    );
   }
 
   return (
@@ -141,55 +127,18 @@ export function NewClientForm({
             إلغاء
           </button>
           <button type="submit" form="new-client" className="btn primary">
-            زيد الزبون
+            حفظ الزبون
           </button>
         </>
       }
     >
-      <form id="new-client" className="form-grid" onSubmit={submit} noValidate>
-        <Field id="n-name" label="اسم الزبون" error={errors.name} hint="مثلا: محمد صاحب سمير لي خدام فالكابلاج" wide>
+      <form id="new-client" className="form-grid one-col" onSubmit={submit} noValidate>
+        <Field id="n-name" label="اسم الزبون" error={errors.name} hint="مثلا: محمد صاحب سمير لي خدام فالكابلاج">
           <input id="n-name" value={v.name} onChange={(e) => set("name")(e.target.value)} autoComplete="off" autoFocus />
         </Field>
         <Field id="n-phone" label="رقم الهاتف" error={errors.phone} hint={samePhone ? `⚠️ هاد الرقم عند: ${samePhone.client.name}` : "مثلا 0661234567"}>
           <input id="n-phone" type="tel" inputMode="tel" dir="ltr" value={v.phone} onChange={(e) => set("phone")(e.target.value)} />
         </Field>
-        <Field id="n-notes" label="ملاحظات">
-          <input id="n-notes" value={v.notes} onChange={(e) => set("notes")(e.target.value)} />
-        </Field>
-
-        <h3 className="form-section wide">أول شراء</h3>
-        <Field id="n-item" label="السلعة" error={errors.item} hint="خليها خاوية إلا ما شرا والو دابا" wide>
-          <input id="n-item" value={v.item} onChange={(e) => set("item")(e.target.value)} />
-        </Field>
-        <Field id="n-price" label="ثمن البيع" error={errors.price} hint="درهم">
-          <input id="n-price" inputMode="decimal" dir="ltr" value={v.price} onChange={(e) => set("price")(e.target.value)} />
-        </Field>
-        <Field id="n-advance" label="التسبيق" error={errors.advance} hint="شحال خلص دابا">
-          <input id="n-advance" inputMode="decimal" dir="ltr" value={v.advance} onChange={(e) => set("advance")(e.target.value)} />
-        </Field>
-        <Field id="n-date" label="تاريخ الشراء" error={errors.date}>
-          <input id="n-date" type="date" value={v.date} max={today} onChange={(e) => set("date")(e.target.value)} />
-        </Field>
-
-        <h3 className="form-section wide">الطريطة</h3>
-        <Field id="n-installment" label="مبلغ الطريطة" error={errors.installment} hint="درهم">
-          <input id="n-installment" inputMode="decimal" dir="ltr" value={v.installment} onChange={(e) => set("installment")(e.target.value)} />
-        </Field>
-        <Field id="n-period" label="كل">
-          <PeriodSelect id="n-period" value={v.period} onChange={set("period")} />
-        </Field>
-        <Field id="n-next" label="الدفعة المقبلة" wide>
-          <input id="n-next" type="date" value={v.nextDueDate} onChange={(e) => set("nextDueDate")(e.target.value)} />
-        </Field>
-        {remaining > 0 && (
-          <p className="form-total wide">
-            الكريدي: <strong>{money(remaining)}</strong>
-            {(() => {
-              const m = monthsToFinish(remaining, parseAmount(v.installment || "0") || 0, v.period);
-              return m ? ` · غادي يخلص فـ ${m} شهر تقريبا` : "";
-            })()}
-          </p>
-        )}
       </form>
     </Modal>
   );
