@@ -9,6 +9,11 @@ import { displayDate, installmentText } from "@/lib/receipt";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { ArchiveView } from "./ArchiveView";
 import { BackupDialog } from "./BackupDialog";
+import { CaisseView } from "./CaisseView";
+import { ReportsView } from "./ReportsView";
+import { SaleForm, type SaleDone } from "./SaleForm";
+import { SaleTicketDialog } from "./SaleTicket";
+import { StockView } from "./StockView";
 import { ClientDetail } from "./ClientDetail";
 import { InstallButton } from "./InstallButton";
 import { NewClientForm } from "./ClientForms";
@@ -56,7 +61,19 @@ type Dialog =
   | { kind: "remind" }
   | { kind: "archive-all" }
   | { kind: "backup"; reminder?: boolean }
+  | { kind: "sale-ticket"; ticket: string }
   | null;
+
+type View = "credit" | "sell" | "stock" | "caisse" | "reports";
+
+const VIEWS: { value: View; icon: string; label: string }[] = [
+  { value: "credit", icon: "📒", label: "الكريدي" },
+  { value: "sell", icon: "🛒", label: "البيع" },
+  { value: "stock", icon: "📦", label: "المخزون" },
+  { value: "caisse", icon: "💰", label: "الصندوق" },
+  { value: "reports", icon: "📊", label: "التقارير" },
+];
+const VIEW_KEY = "view";
 
 const MAX_CARDS = 200;
 
@@ -67,6 +84,34 @@ export function Dashboard() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [view, setViewState] = useState<View>("credit");
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(VIEW_KEY) as View | null;
+      if (saved && VIEWS.some((v) => v.value === saved)) setViewState(saved);
+    } catch {}
+  }, []);
+
+  function setView(v: View) {
+    setViewState(v);
+    window.scrollTo({ top: 0 });
+    try {
+      sessionStorage.setItem(VIEW_KEY, v);
+    } catch {}
+  }
+
+  function saleDone(done: SaleDone) {
+    if (done.type === "كاش") {
+      setToast(`تسجل البيع${online ? "" : " · محفوظ فالتيليفون"}`);
+      setDialog({ kind: "sale-ticket", ticket: done.ticket });
+    } else if (done.clientId && done.paymentId) {
+      setDialog({ kind: "receipt", id: done.clientId, paymentId: done.paymentId, notice: "تسجل البيع بالكريدي والتسبيق" });
+    } else if (done.clientId) {
+      setToast("تسجل البيع بالكريدي");
+      setDialog({ kind: "client", id: done.clientId });
+    }
+  }
   const [toast, setToast] = useState("");
   const [archiving, setArchiving] = useState(false);
 
@@ -180,8 +225,31 @@ export function Dashboard() {
         </div>
       </header>
 
+      <nav className="views" aria-label="الأقسام">
+        {VIEWS.map((v) => (
+          <button key={v.value} type="button" className={view === v.value ? "on" : ""} aria-current={view === v.value ? "page" : undefined} onClick={() => setView(v.value)}>
+            <span aria-hidden="true">{v.icon}</span>
+            <span>{v.label}</span>
+          </button>
+        ))}
+      </nav>
+
       <main className="content">
         <SyncBar state={data} />
+
+        {view !== "credit" && !data.ledger && !data.loadError && <p className="muted center">كنجيبو المعلومات من الـ Google Sheet…</p>}
+        {view !== "credit" && data.loadError && !data.ledger && <p className="alert error">{data.loadError}</p>}
+        {view === "sell" && data.ledger && (
+          <section className="sell-view" aria-label="البيع">
+            <SaleForm data={data} onDone={saleDone} />
+          </section>
+        )}
+        {view === "stock" && data.ledger && <StockView data={data} onToast={setToast} />}
+        {view === "caisse" && data.ledger && <CaisseView data={data} onToast={setToast} />}
+        {view === "reports" && data.ledger && <ReportsView data={data} onToast={setToast} />}
+
+        {view === "credit" && (
+        <>
 
         <section className="summary" aria-label="ملخص">
           <div className="stat">
@@ -358,6 +426,8 @@ export function Dashboard() {
             )}
           </>
         )}
+        </>
+        )}
       </main>
 
       {dialog?.kind === "add" && (
@@ -381,6 +451,9 @@ export function Dashboard() {
       )}
       {dialog?.kind === "receipt" && find(dialog.id) && (
         <ReceiptDialog summary={find(dialog.id)!} mode="payment" paymentId={dialog.paymentId} notice={dialog.notice} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.kind === "sale-ticket" && data.ledger && (
+        <SaleTicketDialog lines={data.ledger.sales.filter((x) => x.ticket === dialog.ticket)} notice="تسجل البيع ✓" onClose={() => setDialog(null)} />
       )}
       {dialog?.kind === "backup" && (
         <BackupDialog reminder={dialog.reminder} pending={data.pendingCount} onClose={() => setDialog(null)} onToast={setToast} />

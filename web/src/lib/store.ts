@@ -1,9 +1,9 @@
 import "server-only";
 import { env } from "./env";
-import { applyOp, summarize, type Ledger, type LedgerOp, type OpResult } from "./ledger";
-import { ARCHIVE_TABS, HEADERS, ledgerToRows, migrateOldRows, rowsToLedger, sameRow, TABS, type TableKey } from "./ledger-sheet";
+import { applyOp, emptyLedger, summarize, type Ledger, type LedgerOp, type OpResult } from "./ledger";
+import { ARCHIVE_TABS, DEFAULT_CATEGORIES, HEADERS, ledgerToRows, migrateOldRows, rowsToLedger, sameRow, SHOP_KEYS, TABS, type TableKey } from "./ledger-sheet";
 import { matchesClient } from "./format";
-import { appendRows, deleteRows, ensureTabs, findTab, readIds, readTables, updateRows, type Cell } from "./sheets";
+import { appendRows, deleteRows, ensureTabs, findTab, listTabs, readIds, readTables, updateRows, type Cell } from "./sheets";
 import { todayISO } from "./sheet-logic";
 
 const KEYS = Object.keys(TABS) as TableKey[];
@@ -13,8 +13,24 @@ export async function needsSetup(): Promise<boolean> {
   return !(await findTab(TABS.clients, true));
 }
 
+/**
+ * Sheets set up before the shop features (stock, sales, cash drawer) get
+ * their tabs on first use, with the default product families.
+ */
+async function ensureShopTabs(): Promise<void> {
+  const have = new Set((await listTabs()).map((t) => t.title));
+  const missing = SHOP_KEYS.filter((k) => !have.has(TABS[k]));
+  if (!missing.length) return;
+  await ensureTabs(missing.map((k) => ({ title: TABS[k], header: HEADERS[k] })));
+  if (missing.includes("categories")) {
+    const rows = ledgerToRows({ ...emptyLedger(), categories: DEFAULT_CATEGORIES }).categories;
+    await appendRows(TABS.categories, [...rows.values()]);
+  }
+}
+
 /** The whole active ledger, in one request. */
 export async function loadLedger(): Promise<Ledger> {
+  await ensureShopTabs();
   const tables = await readTables(KEYS.map((k) => TABS[k]));
   return rowsToLedger(Object.fromEntries(KEYS.map((k) => [k, tables[TABS[k]]])) as Record<TableKey, unknown[][]>);
 }
@@ -82,7 +98,7 @@ export async function sync(ops: LedgerOp[]): Promise<SyncResult[]> {
 /** Create the tabs and move the customers of the old "Feuille 1" into them. */
 export async function setup(): Promise<{ clients: number; purchases: number; payments: number }> {
   if (!(await needsSetup())) throw new Error("already set up");
-  let migrated: Ledger = { clients: [], purchases: [], payments: [], changes: [] };
+  let migrated: Ledger = emptyLedger();
   const oldTab = await findTab(env.sheetName());
   if (oldTab) {
     const rows = (await readTables([oldTab.title], true))[oldTab.title];
@@ -92,7 +108,7 @@ export async function setup(): Promise<{ clients: number; purchases: number; pay
     ...KEYS.map((k) => ({ title: TABS[k], header: HEADERS[k] })),
     ...ARCHIVE_KEYS.map((k) => ({ title: ARCHIVE_TABS[k], header: HEADERS[k] })),
   ]);
-  const rows = ledgerToRows(migrated);
+  const rows = ledgerToRows({ ...migrated, categories: DEFAULT_CATEGORIES });
   for (const k of KEYS) await appendRows(TABS[k], [...rows[k].values()]);
   return { clients: migrated.clients.length, purchases: migrated.purchases.length, payments: migrated.payments.length };
 }
@@ -114,10 +130,10 @@ export async function archive(ids?: string[]): Promise<number> {
   if (!chosen.length) return 0;
   const set = new Set(chosen);
   const moving: Ledger = {
+    ...emptyLedger(),
     clients: ledger.clients.filter((c) => set.has(c.id)),
     purchases: ledger.purchases.filter((p) => set.has(p.clientId)),
     payments: ledger.payments.filter((p) => set.has(p.clientId)),
-    changes: [],
   };
   await ensureTabs(ARCHIVE_KEYS.map((k) => ({ title: ARCHIVE_TABS[k], header: HEADERS[k] })));
   // Copy first (skipping anything already copied by an interrupted run), then delete.
@@ -139,11 +155,11 @@ export async function archive(ids?: string[]): Promise<number> {
 
 async function loadArchive(): Promise<{ ledger: Ledger; raw: Record<ArchiveKey, unknown[][]> }> {
   if (!(await findTab(ARCHIVE_TABS.clients))) {
-    return { ledger: { clients: [], purchases: [], payments: [], changes: [] }, raw: { clients: [], purchases: [], payments: [] } };
+    return { ledger: emptyLedger(), raw: { clients: [], purchases: [], payments: [] } };
   }
   const tables = await readTables(ARCHIVE_KEYS.map((k) => ARCHIVE_TABS[k]));
   const raw = Object.fromEntries(ARCHIVE_KEYS.map((k) => [k, tables[ARCHIVE_TABS[k]]])) as Record<ArchiveKey, unknown[][]>;
-  return { ledger: rowsToLedger({ ...raw, changes: [] }), raw };
+  return { ledger: rowsToLedger(raw), raw };
 }
 
 /** Archived customers whose name or phone matches (at most 50). */
@@ -152,10 +168,10 @@ export async function searchArchive(query: string): Promise<Ledger> {
   const found = ledger.clients.filter((c) => matchesClient(c.name, c.phone, query)).slice(0, 50);
   const ids = new Set(found.map((c) => c.id));
   return {
+    ...emptyLedger(),
     clients: found,
     purchases: ledger.purchases.filter((p) => ids.has(p.clientId)),
     payments: ledger.payments.filter((p) => ids.has(p.clientId)),
-    changes: [],
   };
 }
 
@@ -165,10 +181,10 @@ export async function restore(clientId: string): Promise<boolean> {
   const client = ledger.clients.find((c) => c.id === clientId);
   if (!client) return false;
   const moving: Ledger = {
+    ...emptyLedger(),
     clients: [client],
     purchases: ledger.purchases.filter((p) => p.clientId === clientId),
     payments: ledger.payments.filter((p) => p.clientId === clientId),
-    changes: [],
   };
   const active = await loadLedger();
   const rows = ledgerToRows(moving);

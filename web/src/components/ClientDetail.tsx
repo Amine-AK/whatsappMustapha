@@ -8,6 +8,7 @@ import { displayDate, displayDateTime, installmentText } from "@/lib/receipt";
 import { ClientInfoForm, InstallmentForm } from "./ClientForms";
 import { Modal } from "./Modal";
 import { PaymentForm, PurchaseForm } from "./MoneyForms";
+import { SaleForm } from "./SaleForm";
 import { ReceiptDialog } from "./ReceiptDialog";
 import type { LedgerState } from "./useLedger";
 import { Confirm } from "./ui";
@@ -16,6 +17,7 @@ type Sub =
   | { kind: "info" }
   | { kind: "installment"; reason?: string }
   | { kind: "purchase"; purchase?: Purchase }
+  | { kind: "sale" }
   | { kind: "payment"; payment?: Payment }
   | { kind: "receipt"; mode: "payment" | "statement"; paymentId?: string; notice?: string }
   | { kind: "delete-purchase"; purchase: Purchase }
@@ -105,7 +107,7 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
           <button type="button" className="btn primary" onClick={() => setSub({ kind: "payment" })} disabled={!s.purchases.length}>
             دفعة
           </button>
-          <button type="button" className="btn" onClick={() => setSub({ kind: "purchase" })}>
+          <button type="button" className="btn" onClick={() => setSub({ kind: "sale" })}>
             شراء جديد
           </button>
           <button type="button" className="btn" onClick={() => setSub({ kind: "receipt", mode: "statement" })}>
@@ -222,6 +224,18 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
             if (paymentId) setSub({ kind: "receipt", mode: "payment", paymentId, notice: "تسجل التسبيق" });
           }}
         />
+      )}
+      {sub?.kind === "sale" && (
+        <Modal title={`شراء جديد: ${s.client.name}`} onClose={() => setSub(null)}>
+          <SaleForm
+            data={data}
+            lockedClientId={s.client.id}
+            onDone={(done) => {
+              onToast(`تزاد الشراء${savedNote}`);
+              setSub(done.paymentId ? { kind: "receipt", mode: "payment", paymentId: done.paymentId, notice: "تسجل التسبيق" } : null);
+            }}
+          />
+        </Modal>
       )}
       {sub?.kind === "payment" && (
         <PaymentForm

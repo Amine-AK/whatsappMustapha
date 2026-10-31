@@ -93,6 +93,46 @@ the sheet itself. To stop it:
    `runDailyMorningAutomation`).
 3. Back in the editor, delete the code (or the whole project) and save.
 
+## The shop: sales, stock, cash drawer, reports
+
+Five sections (bottom bar on the phone, tabs on a PC): **الكريدي**, **البيع**,
+**المخزون**, **الصندوق**, **التقارير**. Everything works offline and syncs later,
+like the credit ledger.
+
+**New tabs** (created on their own the first time the app opens a sheet that
+was set up before them):
+
+| Tab | One row per |
+|---|---|
+| `المخزون` | product: name, family, new/used, cost, price, quantity, IMEI/serial |
+| `الفئات` | product family and its target margin (5 families to start with) |
+| `المبيعات` | line sold, cash or credit: cost, price, profit, seller, customer |
+| `حركات المخزون` | quantity changed by hand (delivery, count, loss…) and why |
+| `الصندوق اليومي` | drawer closing: cash in, expenses, expected, counted, difference |
+
+- **البيع (sale):** 💵 cash (no customer) or 📒 credit (a customer's account, with
+  an optional advance). Search products as you type (`ip 11` finds
+  `iPhone 11 64GB`), tap quick items (charger, cable, remote, screen protector),
+  or type anything that isn't in stock. The price can be changed (discount); the
+  cost and profit are shown, and a price under cost is refused. «شراء جديد» in a
+  customer's account uses the same form, so every sale is in the reports.
+  A cash sale prints a «وصل البيع» ticket.
+- **المخزون (stock):** a sale takes the product out of stock; cancelling it
+  (in التقارير) puts it back. Quantity changes by hand are differences
+  (+3 delivered, −1 lost), so counts from two phones add up, and each one is
+  logged with its reason and the seller.
+- **الصندوق (cash drawer):** money in for the day = cash sales + credit advances
+  + instalments. «إغلاق الصندوق» records the expenses and the cash actually
+  counted; the sheet keeps the expected amount and the difference, so the owner
+  can check every evening. Payments typed in that day with an earlier date are
+  listed apart.
+- **التقارير (reports):** today / week / month / year / custom, by family or
+  product name: revenue, net profit (price − cost; lines without a known cost
+  are counted apart), cash vs credit, units sold per product, chart per day or
+  month. A credit sale counts on the day it is sold.
+
+The seller's name is remembered on each phone and saved with every sale.
+
 ## 1. Google Sheets access (once)
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/) and create a
