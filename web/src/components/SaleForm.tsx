@@ -13,9 +13,10 @@ import {
   type StockItem,
 } from "@/lib/ledger";
 import { formatMoroccoPhone, isManualPeriod, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
-import { categoryIcon, currentSeller, findByCode, marginCheck, round2, searchStock } from "@/lib/shop";
+import { currentSeller, findByCode, marginCheck, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
 import { BarcodeScanner } from "./BarcodeScanner";
+import { CategoryIcon } from "./CategoryIcon";
 import { useScannerInput } from "./useScannerInput";
 import type { LedgerState } from "./useLedger";
 import { ClientPicker, Field, parseAmount } from "./ui";
@@ -339,9 +340,7 @@ export function SaleForm({
               setQuery("");
             }}
           >
-            <span className="cat-icon" aria-hidden="true">
-              {categoryIcon(c.name)}
-            </span>
+            <CategoryIcon category={c} className="cat-icon" />
             <span className="cat-name">{c.name}</span>
             <span className="cat-count">{inStock.get(c.name) ?? 0} متوفر</span>
           </button>
@@ -394,7 +393,7 @@ export function SaleForm({
             {cat ? (
               <li className="pr-head">
                 <strong>
-                  {categoryIcon(cat)} {cat}
+                  <CategoryIcon category={ledger.categories.find((x) => x.name === cat)} name={cat} className="pr-head-icon" /> {cat}
                 </strong>
                 <button type="button" className="icon-btn" aria-label="سد" onClick={() => setCat("")}>
                   ✕

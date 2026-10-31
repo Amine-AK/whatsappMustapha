@@ -135,6 +135,19 @@ export async function readAllTabs(): Promise<{ title: string; rows: unknown[][] 
   return tabs.map((t, i) => ({ title: t.title, rows: data.valueRanges?.[i]?.values ?? [] }));
 }
 
+/** Row 1 (the titles) of several tabs, in one request. */
+export async function readHeaders(titles: string[]): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = Object.fromEntries(titles.map((t) => [t, []]));
+  if (!titles.length) return out;
+  const data = await api<{ valueRanges?: { values?: unknown[][] }[] }>("/values:batchGet", {
+    query: { ranges: titles.map((t) => a1(t, "A1:Z1")) },
+  });
+  (data.valueRanges ?? []).forEach((vr, i) => {
+    out[titles[i]] = (vr.values?.[0] ?? []).map((v) => String(v ?? "").trim());
+  });
+  return out;
+}
+
 /** Column A (ids) from row 2 of several tabs: index i is sheet row i + 2. */
 export async function readIds(titles: string[]): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = Object.fromEntries(titles.map((t) => [t, []]));

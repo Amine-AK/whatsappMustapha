@@ -61,8 +61,8 @@ describe("product search", () => {
 
   it("warns below cost or under the family's margin", () => {
     expect(marginCheck(1900, 2000, undefined)).toBe("loss");
-    expect(marginCheck(2100, 2000, { name: "x", description: "", marginTarget: 10 })).toBe("low");
-    expect(marginCheck(2300, 2000, { name: "x", description: "", marginTarget: 10 })).toBe("ok");
+    expect(marginCheck(2100, 2000, { name: "x", description: "", marginTarget: 10, icon: "" })).toBe("low");
+    expect(marginCheck(2300, 2000, { name: "x", description: "", marginTarget: 10, icon: "" })).toBe("ok");
     expect(marginCheck(100, null, undefined)).toBe("unknown");
   });
 });
@@ -161,6 +161,30 @@ describe("cash drawer and reports", () => {
     expect(rangeOf("month", "2026-10-22")).toEqual({ from: "2026-10-01", to: "2026-10-22" });
     expect(rangeOf("year", "2026-10-22").from).toBe("2026-01-01");
     expect(report([], "2026-01-01", "2026-10-22").monthly).toBe(true);
+  });
+});
+
+describe("family icons", () => {
+  it("keeps an emoji or a small picture, refuses anything else", () => {
+    const save = (icon: string) => applyOp(emptyLedger(), op({ type: "category.save", category: { name: "تلفزات", description: "", marginTarget: 0, icon } }));
+    expect(save("📺").result).toBe("ok");
+    expect(save("data:image/webp;base64,UklGRhIAAABXRUJQ").result).toBe("ok");
+    expect(save("").result).toBe("ok");
+    expect(save("data:image/webp;base64," + "A".repeat(50_000)).result).toBe("invalid"); // too big for a cell
+    expect(save("data:text/html;base64,PHNjcmlwdD4=").result).toBe("invalid");
+    expect(save("<img src=x onerror=alert(1)>").result).toBe("invalid");
+    // Changing only the icon is a change.
+    const l = save("📺").ledger;
+    expect(applyOp(l, op({ type: "category.save", category: { name: "تلفزات", description: "", marginTarget: 0, icon: "🖥️" } })).result).toBe("ok");
+  });
+
+  it("is saved in the new column and read back", () => {
+    const l = applyOp(emptyLedger(), op({ type: "category.save", category: { name: "تلفزات", description: "", marginTarget: 20, icon: "📺" } })).ledger;
+    const row = ledgerToRows(l, "2026-10-20").categories.get("تلفزات")!;
+    expect(row).toEqual(["تلفزات", "", 20, "📺"]);
+    expect(rowsToLedger({ categories: [row] }).categories[0].icon).toBe("📺");
+    // Rows from before the column: no icon (the app guesses one from the name).
+    expect(rowsToLedger({ categories: [["ريباراسيون", "", 60]] }).categories[0].icon).toBe("");
   });
 });
 

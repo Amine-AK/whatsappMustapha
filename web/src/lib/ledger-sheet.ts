@@ -35,11 +35,11 @@ export const TABS = {
 export const SHOP_KEYS = ["stock", "categories", "sales", "moves", "closings"] as const;
 
 export const DEFAULT_CATEGORIES: Category[] = [
-  { name: "كهرومنزلي كبير", description: "ثلاجات، غسالات، كليماتيزورات، فرنات…", marginTarget: 15 },
-  { name: "هواتف وأجهزة", description: "هواتف جديدة ومستعملة، طابليط…", marginTarget: 10 },
-  { name: "إكسسوارات وكابلات", description: "شواحن، كابلات، تيليكوموند، كاسك…", marginTarget: 50 },
-  { name: "ريباراسيون", description: "إصلاح وصيانة، تبديل الشاشة، تركيب…", marginTarget: 60 },
-  { name: "أواني منزلية", description: "أجهزة وأواني الكوزينة…", marginTarget: 25 },
+  { name: "كهرومنزلي كبير", description: "ثلاجات، غسالات، كليماتيزورات، فرنات…", marginTarget: 15, icon: "🧊" },
+  { name: "هواتف وأجهزة", description: "هواتف جديدة ومستعملة، طابليط…", marginTarget: 10, icon: "📱" },
+  { name: "إكسسوارات وكابلات", description: "شواحن، كابلات، تيليكوموند، كاسك…", marginTarget: 50, icon: "🔌" },
+  { name: "ريباراسيون", description: "إصلاح وصيانة، تبديل الشاشة، تركيب…", marginTarget: 60, icon: "🛠️" },
+  { name: "أواني منزلية", description: "أجهزة وأواني الكوزينة…", marginTarget: 25, icon: "🍳" },
 ];
 
 export const ARCHIVE_TABS = {
@@ -61,7 +61,7 @@ export const HEADERS: Record<TableKey, string[]> = {
   ],
   changes: ["رقم", "رقم الزبون", "الزبون", "التاريخ", "الطريطة القديمة", "الطريطة الجديدة", "المدة القديمة", "المدة الجديدة", "السبب", "تاريخ الإضافة"],
   stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "الباركود / IMEI", "ملاحظات", "تاريخ الإضافة", "آخر تعديل"],
-  categories: ["الفئة", "الوصف", "هامش الربح المستهدف %"],
+  categories: ["الفئة", "الوصف", "هامش الربح المستهدف %", "الأيقونة"],
   sales: [
     "رقم البيع", "رقم التيكي", "التاريخ", "الساعة", "السلعة", "الفئة", "رقم السلعة فالمخزون", "الكمية",
     "ثمن الشراء", "الثمن المقترح", "ثمن البيع", "الربح", "النوع", "رقم الزبون", "الزبون", "رقم العملية",
@@ -172,7 +172,7 @@ export function rowToStock(r: unknown[]): StockItem | null {
 
 export function rowToCategory(r: unknown[]): Category | null {
   const name = s(r[0]);
-  return name ? { name, description: s(r[1]), marginTarget: n(r[2]) } : null;
+  return name ? { name, description: s(r[1]), marginTarget: n(r[2]), icon: s(r[3]) } : null;
 }
 
 export function rowToSale(r: unknown[]): Sale | null {
@@ -286,7 +286,7 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
       [x.id, x.item, x.category, x.condition, x.buyPrice, x.sellPrice, x.quantity, x.serial, x.notes, x.createdAt, x.updatedAt],
     ]),
   );
-  const categories = new Map<string, Cell[]>(ledger.categories.map((c) => [c.name, [c.name, c.description, money(c.marginTarget)]]));
+  const categories = new Map<string, Cell[]>(ledger.categories.map((c) => [c.name, [c.name, c.description, money(c.marginTarget), c.icon]]));
   const sales = new Map<string, Cell[]>(
     ledger.sales.map((x) => [
       x.id,

@@ -811,3 +811,28 @@ a.btn { text-decoration: none; }
 }
 .scanner-help { position: absolute; inset-inline: 0; bottom: 10px; text-align: center; color: #fff; font-size: 14px; text-shadow: 0 1px 3px #000; }
 .scanner-type { display: grid; gap: 6px; }
+
+/* ---------------------------------------------------------------- category icons */
+
+.cat-img { display: block; object-fit: cover; border-radius: 10px; }
+.cat-img.cat-icon { width: 40px; height: 40px; }
+.chip-icon { display: inline-flex; align-items: center; gap: 6px; }
+.chip-emoji { font-size: 15px; line-height: 1; }
+.cat-img.chip-emoji { width: 20px; height: 20px; border-radius: 5px; }
+.pr-head-icon { display: inline-block; vertical-align: middle; }
+.cat-img.pr-head-icon { width: 22px; height: 22px; border-radius: 5px; }
+.cat-preview { display: flex; justify-content: center; }
+.cat-preview .cat-tile { width: 130px; cursor: default; }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.emoji-grid button {
+  height: 44px; font-size: 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer;
+}
+.emoji-grid button.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.cat-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cat-list button {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; text-align: start; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+}
+.cat-list-icon { font-size: 26px; width: 40px; text-align: center; flex: none; }
+.cat-img.cat-list-icon { width: 40px; height: 40px; }
+.cat-list-name { display: grid; flex: 1; min-width: 0; }

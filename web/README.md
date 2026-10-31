@@ -105,7 +105,7 @@ was set up before them):
 | Tab | One row per |
 |---|---|
 | `المخزون` | product: name, family, new/used, cost, price, quantity, IMEI/serial |
-| `الفئات` | product family and its target margin (5 families to start with) |
+| `الفئات` | product family, its target margin and its icon (5 families to start with) |
 | `المبيعات` | line sold, cash or credit: cost, price, profit, seller, customer |
 | `حركات المخزون` | quantity changed by hand (delivery, count, loss…) and why |
 | `الصندوق اليومي` | drawer closing: cash in, expenses, expected, counted, difference |
@@ -131,6 +131,11 @@ was set up before them):
   keys, and repairs codes scanned into a field («é&ç…» → «219…»). A scan is
   ignored while a window (receipt, form) is open, and its Enter never presses
   a button. Scanners must end each code with Enter (the factory default).
+- **Families (🗂️ الفئات in المخزون):** add or change a family, with an emoji or
+  a picture (photo or file). Pictures are cropped and shrunk to 96×96 and saved
+  as text in the «الأيقونة» column (about 1–5 KB, well under a cell's limit), so
+  they need no other storage. «＋ فئة جديدة…» in the product form opens the same
+  window. Sheets made before this column get its title added on their own.
 - **المخزون (stock):** a sale takes the product out of stock; cancelling it
   (in التقارير) puts it back. Quantity changes by hand are differences
   (+3 delivered, −1 lost), so counts from two phones add up, and each one is

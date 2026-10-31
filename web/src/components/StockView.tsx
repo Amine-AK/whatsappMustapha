@@ -7,6 +7,8 @@ import { displayDate } from "@/lib/receipt";
 import { currentSeller, findByCode, normalizeText, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
 import { BarcodeScanner } from "./BarcodeScanner";
+import { CategoryForm } from "./CategoryForm";
+import { CategoryIcon } from "./CategoryIcon";
 import { useScannerInput } from "./useScannerInput";
 import { Modal } from "./Modal";
 import type { LedgerState } from "./useLedger";
@@ -21,6 +23,8 @@ type Sub =
   | { kind: "adjust"; item: StockItem; scanned?: boolean }
   | { kind: "delete"; item: StockItem }
   | { kind: "scan" }
+  | { kind: "categories" }
+  | { kind: "category"; name?: string }
   | null;
 
 export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg: string) => void }) {
@@ -72,6 +76,9 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
       </section>
 
       <div className="actions-row in-flow">
+        <button type="button" className="btn" onClick={() => setSub({ kind: "categories" })}>
+          🗂️ الفئات
+        </button>
         <button type="button" className="btn" onClick={() => setSub({ kind: "scan" })}>
           📷 سكاني
         </button>
@@ -110,7 +117,8 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           الكل
         </button>
         {ledger.categories.map((c) => (
-          <button key={c.name} type="button" className={`chip ${category === c.name ? "on" : ""}`} aria-pressed={category === c.name} onClick={() => setCategory(c.name)}>
+          <button key={c.name} type="button" className={`chip chip-icon ${category === c.name ? "on" : ""}`} aria-pressed={category === c.name} onClick={() => setCategory(c.name)}>
+            <CategoryIcon category={c} className="chip-emoji" />
             {c.name}
           </button>
         ))}
@@ -166,6 +174,46 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           onResult={scanned}
         />
       )}
+      {sub?.kind === "categories" && (
+        <Modal
+          title="🗂️ الفئات"
+          onClose={() => setSub(null)}
+          footer={
+            <button type="button" className="btn primary" onClick={() => setSub({ kind: "category" })}>
+              ＋ فئة جديدة
+            </button>
+          }
+        >
+          <ul className="cat-list">
+            {ledger.categories.map((c) => (
+              <li key={c.name}>
+                <button type="button" onClick={() => setSub({ kind: "category", name: c.name })} aria-label={`تعديل ${c.name}`}>
+                  <CategoryIcon category={c} className="cat-list-icon" />
+                  <span className="cat-list-name">
+                    <strong>{c.name}</strong>
+                    <span className="muted small">
+                      {ledger.stock.filter((s) => s.category === c.name).length} سلعة
+                      {c.marginTarget ? ` · هامش ${c.marginTarget}%` : ""}
+                    </span>
+                  </span>
+                  <span className="muted small">تعديل</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
+      {sub?.kind === "category" && (
+        <CategoryForm
+          data={data}
+          category={ledger.categories.find((c) => c.name === sub.name)}
+          onClose={() => setSub({ kind: "categories" })}
+          onSaved={(name) => {
+            onToast(sub.name ? "تبدلات الفئة" : `تزادت الفئة «${name}»`);
+            setSub({ kind: "categories" });
+          }}
+        />
+      )}
       {sub?.kind === "delete" && (
         <Confirm
           title="حذف السلعة"
@@ -207,7 +255,6 @@ function StockForm({
   const [v, setV] = useState({
     item: item?.item ?? "",
     category: item?.category ?? ledger.categories[0]?.name ?? "",
-    newCategory: "",
     condition: (item?.condition ?? "جديد") as Condition,
     buyPrice: item ? String(item.buyPrice) : "",
     sellPrice: item ? String(item.sellPrice) : "",
@@ -220,8 +267,8 @@ function StockForm({
     setV((o) => ({ ...o, [k]: value }));
     setErrors((e) => ({ ...e, [k]: "" }));
   };
-  const isNewCategory = v.category === "__new";
-  const categoryName = isNewCategory ? v.newCategory.trim() : v.category;
+  const [addingCategory, setAddingCategory] = useState(false);
+  const categoryName = v.category;
   const target = ledger.categories.find((c) => c.name === categoryName)?.marginTarget ?? 0;
   const buy = parseAmount(v.buyPrice || "0");
   const suggested = buy > 0 && target > 0 ? Math.ceil((buy * (1 + target / 100)) / 10) * 10 : 0;
@@ -235,7 +282,6 @@ function StockForm({
     const sell = parseAmount(v.sellPrice || String(suggested || ""));
     const qty = Number(v.quantity);
     if (!v.item.trim()) err.item = "السمية ضرورية";
-    if (isNewCategory && !v.newCategory.trim()) err.newCategory = "سمية الفئة ضرورية";
     if (!(buy >= 0) || (v.buyPrice && !Number.isFinite(parseAmount(v.buyPrice)))) err.buyPrice = "الثمن غير صحيح";
     if (!(sell > 0)) err.sellPrice = "ثمن البيع ضروري";
     else if (buy > 0 && sell < buy) err.sellPrice = "ثمن البيع تحت ثمن الشراء";
@@ -243,7 +289,6 @@ function StockForm({
     setErrors(err);
     if (Object.keys(err).length) return;
     const ops: Parameters<LedgerState["run"]>[1][] = [];
-    if (isNewCategory) ops.push({ type: "category.save", category: { name: categoryName, description: "", marginTarget: 0 } });
     const at = new Date().toISOString();
     const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: fixAzertyDigits(v.serial), notes: v.notes.trim() };
     if (item) {
@@ -284,7 +329,11 @@ function StockForm({
         </Field>
         {duplicate && <p className="alert warn wide">كاينة ديجا «{duplicate.item}» فالمخزون ({duplicate.quantity}). بدل الكمية ديالها عوض ما تزيد وحدة جديدة.</p>}
         <Field id="st-category" label="الفئة">
-          <select id="st-category" value={v.category} onChange={(e) => set("category")(e.target.value)}>
+          <select
+            id="st-category"
+            value={v.category}
+            onChange={(e) => (e.target.value === "__new" ? setAddingCategory(true) : set("category")(e.target.value))}
+          >
             {ledger.categories.map((c) => (
               <option key={c.name} value={c.name}>
                 {c.name}
@@ -293,19 +342,13 @@ function StockForm({
             <option value="__new">＋ فئة جديدة…</option>
           </select>
         </Field>
-        {isNewCategory ? (
-          <Field id="st-newCategory" label="سمية الفئة الجديدة" error={errors.newCategory}>
-            <input id="st-newCategory" value={v.newCategory} onChange={(e) => set("newCategory")(e.target.value)} />
-          </Field>
-        ) : (
-          <Field id="st-condition" label="الحالة">
-            <select id="st-condition" value={v.condition} onChange={(e) => set("condition")(e.target.value)}>
-              {CONDITIONS.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </Field>
-        )}
+        <Field id="st-condition" label="الحالة">
+          <select id="st-condition" value={v.condition} onChange={(e) => set("condition")(e.target.value)}>
+            {CONDITIONS.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </Field>
         <Field id="st-buyPrice" label="ثمن الشراء" error={errors.buyPrice} hint="ديال الوحدة، درهم">
           <input id="st-buyPrice" inputMode="decimal" dir="ltr" value={v.buyPrice} onChange={(e) => set("buyPrice")(e.target.value)} />
         </Field>
@@ -344,6 +387,16 @@ function StockForm({
           </button>
         )}
       </form>
+      {addingCategory && (
+        <CategoryForm
+          data={data}
+          onClose={() => setAddingCategory(false)}
+          onSaved={(name) => {
+            set("category")(name);
+            setAddingCategory(false);
+          }}
+        />
+      )}
       {scanning && (
         <BarcodeScanner
           onClose={() => setScanning(false)}

@@ -97,6 +97,18 @@ export interface Category {
   description: string;
   /** Target margin in %, 0 = none. */
   marginTarget: number;
+  /** An emoji, or a small picture as a data: URL (96×96, fits in one sheet cell). "" = automatic icon. */
+  icon: string;
+}
+
+/** Longest icon kept: a sheet cell holds 50,000 characters. */
+export const MAX_ICON_LENGTH = 45_000;
+
+export function validIcon(icon: unknown): icon is string {
+  if (typeof icon !== "string") return false;
+  if (icon === "") return true;
+  if (icon.startsWith("data:")) return icon.length <= MAX_ICON_LENGTH && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(icon);
+  return icon.length <= 16 && !/[<>"'`\s]/.test(icon);
 }
 
 export const SALE_TYPES = ["كاش", "كريدي"] as const;
@@ -484,9 +496,11 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       if (!c || !text(c.name, 100) || !c.name.trim() || !text(c.description, 300) || !money(c.marginTarget) || c.marginTarget > 1000) {
         return invalid(ledger, "الفئة غير صحيحة");
       }
-      const clean = { name: c.name.trim(), description: c.description.trim(), marginTarget: c.marginTarget };
+      const icon = c.icon ?? "";
+      if (!validIcon(icon)) return invalid(ledger, "الأيقونة غير صحيحة ولا كبيرة بزاف");
+      const clean = { name: c.name.trim(), description: c.description.trim(), marginTarget: c.marginTarget, icon };
       const old = ledger.categories.find((x) => x.name === clean.name);
-      if (old && old.description === clean.description && old.marginTarget === clean.marginTarget) return { ledger, result: "already" };
+      if (old && old.description === clean.description && old.marginTarget === clean.marginTarget && old.icon === clean.icon) return { ledger, result: "already" };
       const categories = old ? ledger.categories.map((x) => (x.name === clean.name ? clean : x)) : [...ledger.categories, clean];
       return { ledger: { ...ledger, categories }, result: "ok" };
     }
