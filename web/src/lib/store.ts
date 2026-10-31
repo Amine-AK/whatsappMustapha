@@ -3,7 +3,7 @@ import { env } from "./env";
 import { applyOp, emptyLedger, summarize, type Ledger, type LedgerOp, type OpResult } from "./ledger";
 import { ARCHIVE_TABS, DEFAULT_CATEGORIES, HEADERS, ledgerToRows, migrateOldRows, rowsToLedger, sameRow, SHOP_KEYS, TABS, type TableKey } from "./ledger-sheet";
 import { matchesClient } from "./format";
-import { appendRows, deleteRows, ensureTabs, findTab, listTabs, readIds, readTables, updateRows, type Cell } from "./sheets";
+import { appendRows, deleteRows, ensureTabs, findTab, listTabs, readHeaders, readIds, readTables, updateRows, type Cell } from "./sheets";
 import { todayISO } from "./sheet-logic";
 
 const KEYS = Object.keys(TABS) as TableKey[];
@@ -17,9 +17,22 @@ export async function needsSetup(): Promise<boolean> {
  * Sheets set up before the shop features (stock, sales, cash drawer) get
  * their tabs on first use, with the default product families.
  */
+let headersChecked = false;
+
 async function ensureShopTabs(): Promise<void> {
   const have = new Set((await listTabs()).map((t) => t.title));
   const missing = SHOP_KEYS.filter((k) => !have.has(TABS[k]));
+  if (!headersChecked) {
+    // Tabs made by an older version: add the column titles that came later
+    // (e.g. «الأيقونة» in الفئات). Once per server start.
+    const present = SHOP_KEYS.filter((k) => have.has(TABS[k]));
+    const rows = await readHeaders(present.map((k) => TABS[k]));
+    const fixes = present
+      .filter((k) => HEADERS[k].some((h, i) => rows[TABS[k]][i] !== h))
+      .map((k) => ({ title: TABS[k], row: 1, values: HEADERS[k] as Cell[] }));
+    await updateRows(fixes);
+    headersChecked = true;
+  }
   if (!missing.length) return;
   await ensureTabs(missing.map((k) => ({ title: TABS[k], header: HEADERS[k] })));
   if (missing.includes("categories")) {

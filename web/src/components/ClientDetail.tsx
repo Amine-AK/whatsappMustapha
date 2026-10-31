@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { apiFetch } from "@/lib/client";
 import { dueText, money, STATUS_LABEL } from "@/lib/format";
-import { monthsToFinish, sortPayments, type Payment, type Purchase } from "@/lib/ledger";
+import { monthsToFinish, sortPayments, type ClientSummary, type Payment, type Purchase } from "@/lib/ledger";
 import { displayDate, displayDateTime, installmentText } from "@/lib/receipt";
 import { ClientInfoForm, InstallmentForm } from "./ClientForms";
 import { Modal } from "./Modal";
@@ -68,6 +68,9 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
               {c.phone}
             </a>
           )}
+          <button type="button" className="delete-mini" onClick={() => setSub({ kind: "delete-client" })} disabled={busy} aria-label={`حذف ${c.name}`} title="حذف الزبون">
+            🗑️ حذف
+          </button>
         </div>
         {c.notes && <p className="muted">{c.notes}</p>}
 
@@ -203,11 +206,6 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
               أرشفة
             </button>
           )}
-          {s.purchases.length === 0 && s.payments.length === 0 && (
-            <button type="button" className="btn danger-ghost" onClick={() => setSub({ kind: "delete-client" })}>
-              حذف الزبون
-            </button>
-          )}
         </div>
       </Modal>
 
@@ -282,20 +280,17 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
         </Confirm>
       )}
       {sub?.kind === "delete-client" && (
-        <Confirm
-          title="حذف الزبون"
-          confirmLabel="إيه، احذف"
-          danger
+        <DeleteClient
+          summary={s}
           onClose={() => setSub(null)}
+          onArchive={s.remaining <= 0 && s.purchases.length > 0 && data.online && data.pendingCount === 0 ? () => setSub({ kind: "archive" }) : undefined}
           onConfirm={() => {
-            data.run(`حذف · ${c.name}`, { type: "client.delete", id: c.id });
+            const withHistory = s.purchases.length > 0 || s.payments.length > 0;
+            data.run(`حذف · ${c.name}`, { type: "client.delete", id: c.id, ...(withHistory ? { withHistory: true } : {}) });
+            onToast(`تحذف ${c.name}`);
             onClose();
           }}
-        >
-          <p className="lead">
-            واش متأكد بغيتي تحذف <strong>{c.name}</strong>؟
-          </p>
-        </Confirm>
+        />
       )}
       {sub?.kind === "archive" && (
         <Confirm
@@ -314,5 +309,62 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
         </Confirm>
       )}
     </>
+  );
+}
+
+/** Delete a customer. With purchases or payments, says exactly what goes and asks to tick a box first. */
+function DeleteClient({ summary: s, onClose, onConfirm, onArchive }: { summary: ClientSummary; onClose: () => void; onConfirm: () => void; onArchive?: () => void }) {
+  const [sure, setSure] = useState(false);
+  const history = s.purchases.length > 0 || s.payments.length > 0;
+  return (
+    <Modal
+      title="حذف الزبون"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            رجوع
+          </button>
+          <button type="button" className="btn danger" onClick={onConfirm} disabled={history && !sure}>
+            🗑️ احذف نهائيا
+          </button>
+        </>
+      }
+    >
+      <p className="lead">
+        واش متأكد بغيتي تحذف <strong>{s.client.name}</strong>؟
+      </p>
+      {history ? (
+        <>
+          <div className="alert error">
+            <span>
+              غادي يتمسح كلشي ديالو من الـ Google Sheet: <strong>{s.purchases.length}</strong> شراء (<strong>{money(s.total)}</strong>) و{" "}
+              <strong>{s.payments.length}</strong> دفعة (<strong>{money(s.paid)}</strong>)
+              {s.remaining > 0 && (
+                <>
+                  ، والكريدي ديالو (<strong>{money(s.remaining)}</strong>) غادي يضيع
+                </>
+              )}
+              . المبيعات ديالو كيتحيدو من التقارير، والسلع كترجع للمخزون. ما يمكنش ترجعو.
+            </span>
+          </div>
+          {onArchive && (
+            <p className="small">
+              خلص كلشي؟ الأحسن{" "}
+              <button type="button" className="link-btn" onClick={onArchive}>
+                أرشفه
+              </button>{" "}
+              عوض ما تحذفو: كيبقى فالأرشيف وتقدر ترجعو.
+            </p>
+          )}
+          <label className="check">
+            <input type="checkbox" checked={sure} onChange={(e) => setSure(e.target.checked)} />
+            فهمت، احذف {s.client.name} وكلشي ديالو
+          </label>
+        </>
+      ) : (
+        <p className="muted small">ما عندو حتى شراء ولا دفعة.</p>
+      )}
+    </Modal>
   );
 }

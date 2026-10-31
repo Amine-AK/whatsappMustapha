@@ -13,9 +13,10 @@ import {
   type StockItem,
 } from "@/lib/ledger";
 import { formatMoroccoPhone, isManualPeriod, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
-import { categoryIcon, currentSeller, findByCode, marginCheck, round2, searchStock } from "@/lib/shop";
+import { currentSeller, findCode, marginCheck, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
 import { BarcodeScanner } from "./BarcodeScanner";
+import { CategoryIcon } from "./CategoryIcon";
 import { useScannerInput } from "./useScannerInput";
 import type { LedgerState } from "./useLedger";
 import { ClientPicker, Field, parseAmount } from "./ui";
@@ -33,6 +34,8 @@ interface Line {
   price: string;
   /** Units in stock when added, null = not from stock. */
   inStock: number | null;
+  /** Serial numbers of the units sold, for products followed by S/N (then qty = how many). */
+  serials: string[];
 }
 
 export interface SaleDone {
@@ -117,13 +120,42 @@ export function SaleForm({
   const advanceAmount = parseAmount(advance || "0");
   const givenAmount = parseAmount(given || "0");
 
-  function addStock(s: StockItem) {
+  /** S/N of this product still in stock and not already in the cart. */
+  const freeSerials = (stockId: string, ls = lines) => {
+    const inCart = new Set(ls.flatMap((l) => l.serials.map((x) => x.toLowerCase())));
+    return (ledger.stock.find((x) => x.id === stockId)?.serials ?? []).filter((x) => !inCart.has(x.toLowerCase()));
+  };
+
+  /** Add a product; for one followed by S/N, the given unit or the next one in stock. */
+  function addStock(s: StockItem, serial?: string) {
+    const tracked = s.serials.length > 0;
+    const pick = tracked ? (serial ?? freeSerials(s.id)[0]) : undefined;
+    if (tracked && !pick) {
+      setError(`ما بقاش S/N متوفر ديال «${s.item}» (كلهم فالبيع ولا تباعو).`);
+      setOpen(false);
+      return;
+    }
+    if (pick && lines.some((l) => l.serials.some((x) => x.toLowerCase() === pick.toLowerCase()))) {
+      setError(`الـ S/N «${pick}» ديجا فهاد البيع.`);
+      return;
+    }
     setLines((ls) => {
       const same = ls.find((l) => l.stockId === s.id);
-      if (same) return ls.map((l) => (l === same ? { ...l, qty: l.qty + 1 } : l));
+      if (same) return ls.map((l) => (l === same ? { ...l, qty: l.qty + 1, serials: pick ? [...l.serials, pick] : l.serials } : l));
       return [
         ...ls,
-        { key: `L${++lineSeq}`, stockId: s.id, item: s.item, category: s.category, qty: 1, unitBuy: s.buyPrice > 0 ? s.buyPrice : null, unitList: s.sellPrice, price: String(s.sellPrice || ""), inStock: s.quantity },
+        {
+          key: `L${++lineSeq}`,
+          stockId: s.id,
+          item: s.item,
+          category: s.category,
+          qty: 1,
+          unitBuy: s.buyPrice > 0 ? s.buyPrice : null,
+          unitList: s.sellPrice,
+          price: String(s.sellPrice || ""),
+          inStock: s.quantity,
+          serials: pick ? [pick] : [],
+        },
       ];
     });
     setQuery("");
@@ -134,15 +166,15 @@ export function SaleForm({
 
   /** A code from the camera or a USB scanner: the product goes in the sale. */
   function scanned(code: string) {
-    const found = findByCode(ledger.stock, code);
-    if (found) return addStock(found);
+    const hit = findCode(ledger.stock, code) ?? findCode(ledger.stock, fixAzertyDigits(code));
+    if (hit) return addStock(hit.item, hit.serial);
     setQuery(code);
     setError(`ما لقيناش الكود «${code}» فالمخزون. اختار السلعة ولا زيدها فالمخزون.`);
   }
   useScannerInput(scanned, formRef);
 
   function addFree(item: string, category = "", price = 0) {
-    setLines((ls) => [...ls, { key: `L${++lineSeq}`, stockId: "", item, category, qty: 1, unitBuy: null, unitList: price, price: price ? String(price) : "", inStock: null }]);
+    setLines((ls) => [...ls, { key: `L${++lineSeq}`, stockId: "", item, category, qty: 1, unitBuy: null, unitList: price, price: price ? String(price) : "", inStock: null, serials: [] }]);
     setQuery("");
     setError("");
     setOpen(false);
@@ -236,13 +268,14 @@ export function SaleForm({
         type,
         clientId: type === "كريدي" ? customer!.id : "",
         purchaseId,
+        serials: l.serials,
         seller: currentSeller(),
         notes: "",
         createdAt: at,
         updatedAt: at,
       });
       if (type === "كريدي") {
-        purchases.push({ id: purchaseId, clientId: customer!.id, date, item: l.qty > 1 ? `${l.qty} × ${l.item.trim()}` : l.item.trim(), price: sellPrice, notes: "", createdAt: at, updatedAt: at });
+        purchases.push({ id: purchaseId, clientId: customer!.id, date, item: l.qty > 1 ? `${l.qty} × ${l.item.trim()}` : l.item.trim(), price: sellPrice, notes: l.serials.length ? `S/N: ${l.serials.join(", ")}` : "", createdAt: at, updatedAt: at });
       }
     });
     ops.push({ type: "sale.add", lines: sales, purchases });
@@ -339,9 +372,7 @@ export function SaleForm({
               setQuery("");
             }}
           >
-            <span className="cat-icon" aria-hidden="true">
-              {categoryIcon(c.name)}
-            </span>
+            <CategoryIcon category={c} className="cat-icon" />
             <span className="cat-name">{c.name}</span>
             <span className="cat-count">{inStock.get(c.name) ?? 0} متوفر</span>
           </button>
@@ -378,8 +409,8 @@ export function SaleForm({
             if (e.key !== "Enter") return;
             e.preventDefault();
             // A USB / Bluetooth scanner types the code then Enter.
-            const byCode = findByCode(ledger.stock, query) ?? findByCode(ledger.stock, fixAzertyDigits(query));
-            if (byCode) addStock(byCode);
+            const byCode = findCode(ledger.stock, query) ?? findCode(ledger.stock, fixAzertyDigits(query));
+            if (byCode) addStock(byCode.item, byCode.serial);
             else if (shown[0]) addStock(shown[0]);
             else if (query.trim()) addFree(query.trim());
           }}
@@ -394,7 +425,7 @@ export function SaleForm({
             {cat ? (
               <li className="pr-head">
                 <strong>
-                  {categoryIcon(cat)} {cat}
+                  <CategoryIcon category={ledger.categories.find((x) => x.name === cat)} name={cat} className="pr-head-icon" /> {cat}
                 </strong>
                 <button type="button" className="icon-btn" aria-label="سد" onClick={() => setCat("")}>
                   ✕
@@ -458,11 +489,24 @@ export function SaleForm({
                 </div>
                 <div className="cart-row">
                   <div className="qty" role="group" aria-label="الكمية">
-                    <button type="button" aria-label="نقص" onClick={() => update(l.key, { qty: Math.max(1, l.qty - 1) })}>
+                    <button
+                      type="button"
+                      aria-label="نقص"
+                      onClick={() => (l.serials.length ? l.serials.length > 1 && update(l.key, { qty: l.qty - 1, serials: l.serials.slice(0, -1) }) : update(l.key, { qty: Math.max(1, l.qty - 1) }))}
+                    >
                       −
                     </button>
                     <span dir="ltr">{l.qty}</span>
-                    <button type="button" aria-label="زيد" onClick={() => update(l.key, { qty: l.qty + 1 })}>
+                    <button
+                      type="button"
+                      aria-label="زيد"
+                      onClick={() => {
+                        if (!l.serials.length) return update(l.key, { qty: l.qty + 1 });
+                        const next = freeSerials(l.stockId)[0];
+                        if (next) update(l.key, { qty: l.qty + 1, serials: [...l.serials, next] });
+                        else setError(`ما بقاش S/N متوفر ديال «${l.item}».`);
+                      }}
+                    >
                       ＋
                     </button>
                   </div>
@@ -497,6 +541,38 @@ export function SaleForm({
                     </label>
                   )}
                 </div>
+                {l.serials.length > 0 && (
+                  <div className="cart-sn" aria-label="الأرقام التسلسلية">
+                    {l.serials.map((x) => (
+                      <span key={x} className="sn-chip" dir="ltr">
+                        {x}
+                        {l.serials.length > 1 && (
+                          <button type="button" aria-label={`حيد ${x}`} onClick={() => update(l.key, { qty: l.qty - 1, serials: l.serials.filter((y) => y !== x) })}>
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                    <select
+                      aria-label="بدل ولا زيد S/N"
+                      value=""
+                      onChange={(e) => {
+                        const x = e.target.value;
+                        if (!x) return;
+                        // With one unit, picking another S/N swaps it; otherwise it adds one more unit.
+                        if (l.serials.length === 1) update(l.key, { serials: [x] });
+                        else update(l.key, { qty: l.qty + 1, serials: [...l.serials, x] });
+                      }}
+                    >
+                      <option value="">{l.serials.length === 1 ? "بدل S/N…" : "＋ S/N…"}</option>
+                      {freeSerials(l.stockId).map((x) => (
+                        <option key={x} value={x}>
+                          {x}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <p className="cart-meta small">
                   {l.inStock !== null && <span className={`stock-badge ${l.inStock - l.qty >= 0 ? "" : "out"}`}>{l.inStock - l.qty >= 0 ? `يبقى: ${l.inStock - l.qty}` : "ما كافيش فالمخزون"}</span>}
                   {l.unitBuy !== null && (

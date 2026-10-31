@@ -105,7 +105,7 @@ was set up before them):
 | Tab | One row per |
 |---|---|
 | `المخزون` | product: name, family, new/used, cost, price, quantity, IMEI/serial |
-| `الفئات` | product family and its target margin (5 families to start with) |
+| `الفئات` | product family, its target margin and its icon (5 families to start with) |
 | `المبيعات` | line sold, cash or credit: cost, price, profit, seller, customer |
 | `حركات المخزون` | quantity changed by hand (delivery, count, loss…) and why |
 | `الصندوق اليومي` | drawer closing: cash in, expenses, expected, counted, difference |
@@ -117,6 +117,17 @@ was set up before them):
   cost and profit are shown, and a price under cost is refused. «شراء جديد» in a
   customer's account uses the same form, so every sale is in the reports.
   A cash sale prints a «وصل البيع» ticket.
+- **Serial numbers (S/N / IMEI):** one product can have many units, each with
+  its own S/N (one per line in «الأرقام التسلسلية»; a USB scanner fills the box
+  code after code). The quantity is the number of S/N. Deliveries add S/N and
+  losses tick the ones that went (in «±», logged in حركات المخزون). In a sale,
+  each unit's S/N is chosen (or scanned: the S/N finds its product); it leaves
+  stock, is saved with the sale and printed on the receipt; cancelling puts it
+  back. A S/N can't be in stock twice or sold twice. Scanning a sold S/N in
+  المخزون says when and to whom it was sold (warranty). Columns
+  «الأرقام التسلسلية (S/N)» in المخزون, المبيعات and حركات المخزون (added on their
+  own to existing sheets). The «الباركود» field stays for the code that is the
+  same on every box.
 - **📷 Scanning (QR / barcode):** «📷 سكاني» in المخزون opens the camera. A
   code already in stock asks how many arrived (+1); a new code opens «سلعة
   جديدة» with it filled in. 📷 in the البيع search bar puts the scanned product
@@ -131,6 +142,11 @@ was set up before them):
   keys, and repairs codes scanned into a field («é&ç…» → «219…»). A scan is
   ignored while a window (receipt, form) is open, and its Enter never presses
   a button. Scanners must end each code with Enter (the factory default).
+- **Families (🗂️ الفئات in المخزون):** add or change a family, with an emoji or
+  a picture (photo or file). Pictures are cropped and shrunk to 96×96 and saved
+  as text in the «الأيقونة» column (about 1–5 KB, well under a cell's limit), so
+  they need no other storage. «＋ فئة جديدة…» in the product form opens the same
+  window. Sheets made before this column get its title added on their own.
 - **المخزون (stock):** a sale takes the product out of stock; cancelling it
   (in التقارير) puts it back. Quantity changes by hand are differences
   (+3 delivered, −1 lost), so counts from two phones add up, and each one is

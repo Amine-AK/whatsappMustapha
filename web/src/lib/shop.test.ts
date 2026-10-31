@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyOp, emptyLedger, summarizeClient, type Ledger, type LedgerOp, type Purchase, type Sale, type StockItem } from "./ledger";
 import { ledgerToRows, rowsToLedger, TABS } from "./ledger-sheet";
-import { cashDay, categoryIcon, filterSales, findByCode, marginCheck, normalizeText, rangeOf, report, searchStock } from "./shop";
+import { cashDay, categoryIcon, filterSales, findByCode, findCode, findSoldSerial, parseSerials, marginCheck, normalizeText, rangeOf, report, searchStock } from "./shop";
 
 const AT = "2026-10-20T09:00:00.000Z";
 let n = 0;
@@ -15,7 +15,7 @@ function run(l: Ledger, body: object) {
 
 const iphone: StockItem = {
   id: "I-IPHONE11", item: "iPhone 11 64GB", category: "هواتف وأجهزة", condition: "مستعمل", buyPrice: 2000, sellPrice: 2600,
-  quantity: 3, serial: "356789012345678", notes: "", createdAt: AT, updatedAt: AT,
+  quantity: 3, serial: "356789012345678", notes: "", createdAt: AT, updatedAt: AT, serials: [],
 };
 const charger: StockItem = { ...iphone, id: "I-CHARGER1", item: "شارجور Type-C سامسونگ", category: "إكسسوارات وكابلات", condition: "جديد", buyPrice: 20, sellPrice: 50, quantity: 10, serial: "" };
 const fridge: StockItem = { ...iphone, id: "I-FRIDGE01", item: "ثلاجة Samsung 400L", category: "كهرومنزلي كبير", condition: "جديد", buyPrice: 5000, sellPrice: 6200, quantity: 0, serial: "" };
@@ -24,7 +24,7 @@ function line(over: Partial<Sale>): Sale {
   return {
     id: "V-LINE0001", ticket: "V-LINE0001", date: "2026-10-20", time: "10:00", item: "iPhone 11 64GB", category: "هواتف وأجهزة",
     stockId: "I-IPHONE11", quantity: 1, buyPrice: 2000, listPrice: 2600, sellPrice: 2500, type: "كاش", clientId: "", purchaseId: "",
-    seller: "سعيد", notes: "", createdAt: AT, updatedAt: AT, ...over,
+    seller: "سعيد", notes: "", createdAt: AT, updatedAt: AT, serials: [], ...over,
   };
 }
 
@@ -61,8 +61,8 @@ describe("product search", () => {
 
   it("warns below cost or under the family's margin", () => {
     expect(marginCheck(1900, 2000, undefined)).toBe("loss");
-    expect(marginCheck(2100, 2000, { name: "x", description: "", marginTarget: 10 })).toBe("low");
-    expect(marginCheck(2300, 2000, { name: "x", description: "", marginTarget: 10 })).toBe("ok");
+    expect(marginCheck(2100, 2000, { name: "x", description: "", marginTarget: 10, icon: "" })).toBe("low");
+    expect(marginCheck(2300, 2000, { name: "x", description: "", marginTarget: 10, icon: "" })).toBe("ok");
     expect(marginCheck(100, null, undefined)).toBe("unknown");
   });
 });
@@ -161,6 +161,93 @@ describe("cash drawer and reports", () => {
     expect(rangeOf("month", "2026-10-22")).toEqual({ from: "2026-10-01", to: "2026-10-22" });
     expect(rangeOf("year", "2026-10-22").from).toBe("2026-01-01");
     expect(report([], "2026-01-01", "2026-10-22").monthly).toBe(true);
+  });
+});
+
+describe("serial numbers (S/N)", () => {
+  const phones: StockItem = { ...iphone, id: "I-A15SNS01", item: "Samsung A15", serial: "8806095000000", serials: ["SN-AAA", "SN-BBB", "SN-CCC"], quantity: 3 };
+  const withPhones = () => run(emptyLedger(), { type: "stock.add", item: phones });
+
+  it("one product, many S/N: a sale takes the chosen units out", () => {
+    const l = run(withPhones(), { type: "sale.add", lines: [line({ stockId: phones.id, item: phones.item, quantity: 2, serials: ["SN-AAA", "SN-CCC"] })], purchases: [] });
+    expect(l.stock[0].quantity).toBe(1);
+    expect(l.stock[0].serials).toEqual(["SN-BBB"]);
+    expect(l.sales[0].serials).toEqual(["SN-AAA", "SN-CCC"]);
+    expect(findSoldSerial(l.sales, "sn-ccc")?.id).toBe("V-LINE0001");
+    expect(findSoldSerial(l.sales, "SN-BBB")).toBeUndefined();
+    // The same unit can't be sold twice (e.g. from two phones offline).
+    expect(applyOp(l, op({ type: "sale.add", lines: [line({ id: "V-AGAIN001", ticket: "V-AGAIN001", stockId: phones.id, serials: ["SN-AAA"] })], purchases: [] })).result).toBe("invalid");
+    // Cancelling gives the units back.
+    const back = run(l, { type: "sale.delete", id: "V-LINE0001" });
+    expect([...back.stock[0].serials].sort()).toEqual(["SN-AAA", "SN-BBB", "SN-CCC"]);
+    expect(back.stock[0].quantity).toBe(3);
+  });
+
+  it("refuses a quantity that doesn't match the S/N, or a S/N already in stock", () => {
+    expect(applyOp(withPhones(), op({ type: "sale.add", lines: [line({ stockId: phones.id, quantity: 2, serials: ["SN-AAA"] })], purchases: [] })).result).toBe("invalid");
+    expect(applyOp(withPhones(), op({ type: "stock.add", item: { ...charger, serials: ["sn-bbb"] } })).result).toBe("invalid");
+  });
+
+  it("deliveries and losses move S/N in and out, and are logged", () => {
+    let l = run(withPhones(), { type: "stock.adjust", move: { id: "M-IN000001", stockId: phones.id, date: "2026-10-20", delta: 2, reason: "وصلات", seller: "", createdAt: AT, serialsIn: ["SN-DDD", "SN-EEE"] } });
+    l = run(l, { type: "stock.adjust", move: { id: "M-OUT00001", stockId: phones.id, date: "2026-10-20", delta: -1, reason: "خاسرة", seller: "", createdAt: AT, serialsOut: ["SN-BBB"] } });
+    expect(l.stock[0].serials).toEqual(["SN-AAA", "SN-CCC", "SN-DDD", "SN-EEE"]);
+    expect(l.stock[0].quantity).toBe(4);
+    expect(applyOp(l, op({ type: "stock.adjust", move: { id: "M-BAD00001", stockId: phones.id, date: "2026-10-20", delta: 1, reason: "", seller: "", createdAt: AT, serialsIn: ["SN-X", "SN-Y"] } })).result).toBe("invalid");
+    // Saved in the sheet (one S/N per line) and read back.
+    const rows = ledgerToRows(l, "2026-10-20");
+    expect(rows.stock.get(phones.id)![11]).toBe("SN-AAA\nSN-CCC\nSN-DDD\nSN-EEE");
+    expect(rows.moves.get("M-OUT00001")![8]).toBe("-SN-BBB");
+    const back = rowsToLedger({ stock: [rows.stock.get(phones.id)!], moves: [...rows.moves.values()] });
+    expect(back.stock[0].serials).toEqual(l.stock[0].serials);
+    expect(back.moves.map((m) => [m.serialsIn, m.serialsOut])).toEqual([[["SN-DDD", "SN-EEE"], undefined], [undefined, ["SN-BBB"]]]);
+  });
+
+  it("finds the unit from its scanned S/N, and reads lists typed in a box", () => {
+    expect(findCode([phones], "sn-bbb")).toEqual({ item: phones, serial: "SN-BBB" });
+    expect(findCode([phones], "8806095000000")).toEqual({ item: phones });
+    expect(searchStock([phones], "ccc")[0].id).toBe(phones.id);
+    expect(parseSerials(" A1\nB2, b2\n\n C3 ;A1")).toEqual(["A1", "B2", "C3"]);
+  });
+});
+
+describe("deleting a customer", () => {
+  it("with purchases and payments only when asked, and then everything of theirs goes", () => {
+    const p: Purchase = { id: "S-PHONE001", clientId: "C-KARIM001", date: "2026-10-20", item: "iPhone 11 64GB", price: 2500, notes: "", createdAt: AT, updatedAt: AT };
+    let l = run(shop(), { type: "sale.add", lines: [line({ type: "كريدي", clientId: "C-KARIM001", purchaseId: p.id })], purchases: [p] });
+    l = run(l, { type: "payment.add", payment: { id: "P-ADV00001", clientId: "C-KARIM001", purchaseId: p.id, date: "2026-10-20", time: "10:00", amount: 1000, kind: "تسبيق", notes: "", createdAt: AT, updatedAt: AT } });
+    l = run(l, { type: "sale.add", lines: [line({ id: "V-CASH0001", ticket: "V-CASH0001", stockId: "I-CHARGER1", item: "شارجور", buyPrice: 20, listPrice: 50, sellPrice: 50 })], purchases: [] });
+    expect(applyOp(l, op({ type: "client.delete", id: "C-KARIM001" })).result).toBe("invalid");
+    l = run(l, { type: "client.delete", id: "C-KARIM001", withHistory: true });
+    expect([l.clients.length, l.purchases.length, l.payments.length]).toEqual([0, 0, 0]);
+    // Their credit sale is cancelled (phone back in stock); other customers' cash sales stay.
+    expect(l.sales.map((s) => s.id)).toEqual(["V-CASH0001"]);
+    expect(l.stock.find((x) => x.id === "I-IPHONE11")!.quantity).toBe(3);
+    expect(applyOp(l, op({ type: "client.delete", id: "C-KARIM001", withHistory: true })).result).toBe("already");
+  });
+});
+
+describe("family icons", () => {
+  it("keeps an emoji or a small picture, refuses anything else", () => {
+    const save = (icon: string) => applyOp(emptyLedger(), op({ type: "category.save", category: { name: "تلفزات", description: "", marginTarget: 0, icon } }));
+    expect(save("📺").result).toBe("ok");
+    expect(save("data:image/webp;base64,UklGRhIAAABXRUJQ").result).toBe("ok");
+    expect(save("").result).toBe("ok");
+    expect(save("data:image/webp;base64," + "A".repeat(50_000)).result).toBe("invalid"); // too big for a cell
+    expect(save("data:text/html;base64,PHNjcmlwdD4=").result).toBe("invalid");
+    expect(save("<img src=x onerror=alert(1)>").result).toBe("invalid");
+    // Changing only the icon is a change.
+    const l = save("📺").ledger;
+    expect(applyOp(l, op({ type: "category.save", category: { name: "تلفزات", description: "", marginTarget: 0, icon: "🖥️" } })).result).toBe("ok");
+  });
+
+  it("is saved in the new column and read back", () => {
+    const l = applyOp(emptyLedger(), op({ type: "category.save", category: { name: "تلفزات", description: "", marginTarget: 20, icon: "📺" } })).ledger;
+    const row = ledgerToRows(l, "2026-10-20").categories.get("تلفزات")!;
+    expect(row).toEqual(["تلفزات", "", 20, "📺"]);
+    expect(rowsToLedger({ categories: [row] }).categories[0].icon).toBe("📺");
+    // Rows from before the column: no icon (the app guesses one from the name).
+    expect(rowsToLedger({ categories: [["ريباراسيون", "", 60]] }).categories[0].icon).toBe("");
   });
 });
 

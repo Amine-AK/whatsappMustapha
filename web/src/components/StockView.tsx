@@ -4,9 +4,11 @@ import { useMemo, useRef, useState, type FormEvent } from "react";
 import { money } from "@/lib/format";
 import { CONDITIONS, newLedgerId, nowParts, type Condition, type StockItem } from "@/lib/ledger";
 import { displayDate } from "@/lib/receipt";
-import { currentSeller, findByCode, normalizeText, round2, searchStock } from "@/lib/shop";
+import { currentSeller, findByCode, findCode, findSoldSerial, normalizeText, parseSerials, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
 import { BarcodeScanner } from "./BarcodeScanner";
+import { CategoryForm } from "./CategoryForm";
+import { CategoryIcon } from "./CategoryIcon";
 import { useScannerInput } from "./useScannerInput";
 import { Modal } from "./Modal";
 import type { LedgerState } from "./useLedger";
@@ -21,6 +23,8 @@ type Sub =
   | { kind: "adjust"; item: StockItem; scanned?: boolean }
   | { kind: "delete"; item: StockItem }
   | { kind: "scan" }
+  | { kind: "categories" }
+  | { kind: "category"; name?: string }
   | null;
 
 export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg: string) => void }) {
@@ -34,8 +38,20 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
 
   /** Scanned (camera or USB scanner): more of a known product, or a new card with the code. */
   function scanned(code: string) {
-    const found = findByCode(ledger.stock, code);
+    const hit = findCode(ledger.stock, code);
     setQuery("");
+    // The S/N of a unit already in stock: show its product.
+    if (hit?.serial) {
+      onToast(`✓ S/N ${hit.serial} كاين فالمخزون: ${hit.item.item}`);
+      return setSub({ kind: "edit", item: hit.item });
+    }
+    // A unit already sold: say when and to whom (warranty) instead of offering a new product.
+    const sold = hit ? undefined : findSoldSerial(ledger.sales, code);
+    if (sold) {
+      const who = sold.clientId ? (ledger.clients.find((c) => c.id === sold.clientId)?.name ?? "زبون") : "كاش";
+      return onToast(`S/N ${code} تباع ${displayDate(sold.date)} · ${sold.item} · ${who}`);
+    }
+    const found = hit?.item;
     setSub(found ? { kind: "adjust", item: found, scanned: true } : { kind: "add", code });
   }
   useScannerInput(scanned, viewRef);
@@ -72,6 +88,9 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
       </section>
 
       <div className="actions-row in-flow">
+        <button type="button" className="btn" onClick={() => setSub({ kind: "categories" })}>
+          🗂️ الفئات
+        </button>
         <button type="button" className="btn" onClick={() => setSub({ kind: "scan" })}>
           📷 سكاني
         </button>
@@ -110,7 +129,8 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           الكل
         </button>
         {ledger.categories.map((c) => (
-          <button key={c.name} type="button" className={`chip ${category === c.name ? "on" : ""}`} aria-pressed={category === c.name} onClick={() => setCategory(c.name)}>
+          <button key={c.name} type="button" className={`chip chip-icon ${category === c.name ? "on" : ""}`} aria-pressed={category === c.name} onClick={() => setCategory(c.name)}>
+            <CategoryIcon category={c} className="chip-emoji" />
             {c.name}
           </button>
         ))}
@@ -128,7 +148,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
                   <strong>{s.item}</strong>
                   <span className="muted small">
                     {s.category || "بلا فئة"} · {s.condition}
-                    {s.serial ? ` · ${s.serial}` : ""}
+                    {s.serials.length ? ` · S/N: ${s.serials.length}` : s.serial ? ` · ${s.serial}` : ""}
                   </span>
                 </span>
                 <span className="stock-price">
@@ -164,6 +184,46 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           title="📷 سكاني السلعة"
           onClose={() => setSub(null)}
           onResult={scanned}
+        />
+      )}
+      {sub?.kind === "categories" && (
+        <Modal
+          title="🗂️ الفئات"
+          onClose={() => setSub(null)}
+          footer={
+            <button type="button" className="btn primary" onClick={() => setSub({ kind: "category" })}>
+              ＋ فئة جديدة
+            </button>
+          }
+        >
+          <ul className="cat-list">
+            {ledger.categories.map((c) => (
+              <li key={c.name}>
+                <button type="button" onClick={() => setSub({ kind: "category", name: c.name })} aria-label={`تعديل ${c.name}`}>
+                  <CategoryIcon category={c} className="cat-list-icon" />
+                  <span className="cat-list-name">
+                    <strong>{c.name}</strong>
+                    <span className="muted small">
+                      {ledger.stock.filter((s) => s.category === c.name).length} سلعة
+                      {c.marginTarget ? ` · هامش ${c.marginTarget}%` : ""}
+                    </span>
+                  </span>
+                  <span className="muted small">تعديل</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
+      {sub?.kind === "category" && (
+        <CategoryForm
+          data={data}
+          category={ledger.categories.find((c) => c.name === sub.name)}
+          onClose={() => setSub({ kind: "categories" })}
+          onSaved={(name) => {
+            onToast(sub.name ? "تبدلات الفئة" : `تزادت الفئة «${name}»`);
+            setSub({ kind: "categories" });
+          }}
         />
       )}
       {sub?.kind === "delete" && (
@@ -207,21 +267,24 @@ function StockForm({
   const [v, setV] = useState({
     item: item?.item ?? "",
     category: item?.category ?? ledger.categories[0]?.name ?? "",
-    newCategory: "",
     condition: (item?.condition ?? "جديد") as Condition,
     buyPrice: item ? String(item.buyPrice) : "",
     sellPrice: item ? String(item.sellPrice) : "",
     quantity: "1",
     serial: item?.serial ?? code ?? "",
+    serials: "",
     notes: item?.notes ?? "",
   });
+  const [scanningSerial, setScanningSerial] = useState(false);
+  const newSerials = parseSerials(v.serials).map(fixAzertyDigits);
+  const serialElsewhere = newSerials.find((x) => ledger.stock.some((s) => s.serials.some((y) => y.toLowerCase() === x.toLowerCase())));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = (k: keyof typeof v) => (value: string) => {
     setV((o) => ({ ...o, [k]: value }));
     setErrors((e) => ({ ...e, [k]: "" }));
   };
-  const isNewCategory = v.category === "__new";
-  const categoryName = isNewCategory ? v.newCategory.trim() : v.category;
+  const [addingCategory, setAddingCategory] = useState(false);
+  const categoryName = v.category;
   const target = ledger.categories.find((c) => c.name === categoryName)?.marginTarget ?? 0;
   const buy = parseAmount(v.buyPrice || "0");
   const suggested = buy > 0 && target > 0 ? Math.ceil((buy * (1 + target / 100)) / 10) * 10 : 0;
@@ -233,17 +296,17 @@ function StockForm({
     e.preventDefault();
     const err: Record<string, string> = {};
     const sell = parseAmount(v.sellPrice || String(suggested || ""));
-    const qty = Number(v.quantity);
+    // With serial numbers, the quantity is how many there are.
+    const qty = newSerials.length || Number(v.quantity);
     if (!v.item.trim()) err.item = "السمية ضرورية";
-    if (isNewCategory && !v.newCategory.trim()) err.newCategory = "سمية الفئة ضرورية";
     if (!(buy >= 0) || (v.buyPrice && !Number.isFinite(parseAmount(v.buyPrice)))) err.buyPrice = "الثمن غير صحيح";
     if (!(sell > 0)) err.sellPrice = "ثمن البيع ضروري";
     else if (buy > 0 && sell < buy) err.sellPrice = "ثمن البيع تحت ثمن الشراء";
     if (!item && (!Number.isInteger(qty) || qty < 0)) err.quantity = "الكمية غير صحيحة";
+    if (serialElsewhere) err.serials = `الـ S/N «${serialElsewhere}» كاين ديجا فالمخزون`;
     setErrors(err);
     if (Object.keys(err).length) return;
     const ops: Parameters<LedgerState["run"]>[1][] = [];
-    if (isNewCategory) ops.push({ type: "category.save", category: { name: categoryName, description: "", marginTarget: 0 } });
     const at = new Date().toISOString();
     const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: fixAzertyDigits(v.serial), notes: v.notes.trim() };
     if (item) {
@@ -251,7 +314,7 @@ function StockForm({
       data.run(`تعديل سلعة · ${fields.item}`, ...ops);
       return onSaved("تبدلات السلعة");
     }
-    ops.push({ type: "stock.add", item: { id: newLedgerId("I"), ...fields, quantity: qty, createdAt: at, updatedAt: at } });
+    ops.push({ type: "stock.add", item: { id: newLedgerId("I"), ...fields, quantity: qty, serials: newSerials, createdAt: at, updatedAt: at } });
     data.run(`سلعة جديدة · ${fields.item}`, ...ops);
     onSaved("تزادت السلعة فالمخزون");
   }
@@ -284,7 +347,11 @@ function StockForm({
         </Field>
         {duplicate && <p className="alert warn wide">كاينة ديجا «{duplicate.item}» فالمخزون ({duplicate.quantity}). بدل الكمية ديالها عوض ما تزيد وحدة جديدة.</p>}
         <Field id="st-category" label="الفئة">
-          <select id="st-category" value={v.category} onChange={(e) => set("category")(e.target.value)}>
+          <select
+            id="st-category"
+            value={v.category}
+            onChange={(e) => (e.target.value === "__new" ? setAddingCategory(true) : set("category")(e.target.value))}
+          >
             {ledger.categories.map((c) => (
               <option key={c.name} value={c.name}>
                 {c.name}
@@ -293,19 +360,13 @@ function StockForm({
             <option value="__new">＋ فئة جديدة…</option>
           </select>
         </Field>
-        {isNewCategory ? (
-          <Field id="st-newCategory" label="سمية الفئة الجديدة" error={errors.newCategory}>
-            <input id="st-newCategory" value={v.newCategory} onChange={(e) => set("newCategory")(e.target.value)} />
-          </Field>
-        ) : (
-          <Field id="st-condition" label="الحالة">
-            <select id="st-condition" value={v.condition} onChange={(e) => set("condition")(e.target.value)}>
-              {CONDITIONS.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </Field>
-        )}
+        <Field id="st-condition" label="الحالة">
+          <select id="st-condition" value={v.condition} onChange={(e) => set("condition")(e.target.value)}>
+            {CONDITIONS.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </Field>
         <Field id="st-buyPrice" label="ثمن الشراء" error={errors.buyPrice} hint="ديال الوحدة، درهم">
           <input id="st-buyPrice" inputMode="decimal" dir="ltr" value={v.buyPrice} onChange={(e) => set("buyPrice")(e.target.value)} />
         </Field>
@@ -313,13 +374,50 @@ function StockForm({
           <input id="st-sellPrice" inputMode="decimal" dir="ltr" placeholder={suggested ? String(suggested) : ""} value={v.sellPrice} onChange={(e) => set("sellPrice")(e.target.value)} />
         </Field>
         {!item && (
-          <Field id="st-quantity" label="الكمية" error={errors.quantity}>
-            <input id="st-quantity" inputMode="numeric" dir="ltr" value={v.quantity} onChange={(e) => set("quantity")(e.target.value.replace(/\D/g, ""))} />
+          <Field id="st-quantity" label="الكمية" error={errors.quantity} hint={newSerials.length ? "= عدد الـ S/N" : undefined}>
+            <input
+              id="st-quantity"
+              inputMode="numeric"
+              dir="ltr"
+              value={newSerials.length ? String(newSerials.length) : v.quantity}
+              disabled={newSerials.length > 0}
+              onChange={(e) => set("quantity")(e.target.value.replace(/\D/g, ""))}
+            />
           </Field>
+        )}
+        {!item ? (
+          <Field
+            id="st-serials"
+            label="الأرقام التسلسلية (S/N / IMEI)"
+            error={errors.serials}
+            hint={newSerials.length ? `${newSerials.length} S/N · وحدة فكل سطر` : "اختياري · وحدة فكل سطر · السكانير كيزيدهم بوحدو"}
+            wide
+          >
+            <div className="code-row">
+              <textarea id="st-serials" dir="ltr" rows={3} value={v.serials} onChange={(e) => set("serials")(e.target.value)} placeholder={"356789012345678\n356789012345679"} />
+              <button type="button" className="btn" onClick={() => setScanningSerial(true)} aria-label="سكاني S/N بالكاميرا">
+                📷
+              </button>
+            </div>
+          </Field>
+        ) : (
+          item.serials.length > 0 && (
+            <div className="field wide">
+              <span>الأرقام التسلسلية (S/N) فالمخزون: {item.serials.length}</span>
+              <ul className="serial-chips">
+                {item.serials.map((x) => (
+                  <li key={x} dir="ltr">
+                    {x}
+                  </li>
+                ))}
+              </ul>
+              <span className="field-hint">زيد ولا نقص S/N بـ «±» فاللائحة.</span>
+            </div>
+          )
         )}
         <Field
           id="st-serial"
-          label="الباركود / IMEI"
+          label="الباركود (نفس الكود فكل علبة)"
           hint={sameCode ? `⚠️ هاد الكود عند: ${sameCode.item}` : code ? "✓ تسكانا" : "اختياري · سكاني ولا كتب"}
           wide
         >
@@ -344,12 +442,32 @@ function StockForm({
           </button>
         )}
       </form>
+      {addingCategory && (
+        <CategoryForm
+          data={data}
+          onClose={() => setAddingCategory(false)}
+          onSaved={(name) => {
+            set("category")(name);
+            setAddingCategory(false);
+          }}
+        />
+      )}
       {scanning && (
         <BarcodeScanner
           onClose={() => setScanning(false)}
           onResult={(c) => {
             set("serial")(c);
             setScanning(false);
+          }}
+        />
+      )}
+      {scanningSerial && (
+        <BarcodeScanner
+          title="📷 سكاني S/N"
+          onClose={() => setScanningSerial(false)}
+          onResult={(c) => {
+            setV((o) => ({ ...o, serials: o.serials.trim() ? `${o.serials.trim()}\n${c}` : c }));
+            setScanningSerial(false);
           }}
         />
       )}
@@ -374,16 +492,35 @@ function AdjustForm({
   const [amount, setAmount] = useState("1");
   const [reason, setReason] = useState(REASONS[0]);
   const [error, setError] = useState("");
-  const qty = Number(amount);
+  const [serialsText, setSerialsText] = useState("");
+  const [outSerials, setOutSerials] = useState<string[]>([]);
+  const [scanningSerial, setScanningSerial] = useState(false);
+  const tracked = item.serials.length > 0;
+  const inSerials = sign === 1 ? parseSerials(serialsText).map(fixAzertyDigits) : [];
+  // Products followed by S/N: the quantity is the number of S/N added or ticked.
+  const bySerial = tracked || (sign === 1 && inSerials.length > 0);
+  const qty = bySerial ? (sign === 1 ? inSerials.length : outSerials.length) : Number(amount);
   const history = data.ledger!.moves.filter((m) => m.stockId === item.id).slice(-5).reverse();
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!Number.isInteger(qty) || qty <= 0) return setError("الكمية غير صحيحة");
+    if (!Number.isInteger(qty) || qty <= 0) return setError(bySerial ? "اختار ولا زيد شي S/N" : "الكمية غير صحيحة");
+    const taken = inSerials.find((x) => data.ledger!.stock.some((s) => s.serials.some((y) => y.toLowerCase() === x.toLowerCase())));
+    if (taken) return setError(`الـ S/N «${taken}» كاين ديجا فالمخزون`);
     const delta = sign * qty;
     data.run(`${delta > 0 ? "+" : ""}${delta} · ${item.item}`, {
       type: "stock.adjust",
-      move: { id: newLedgerId("M"), stockId: item.id, date: nowParts().date, delta, reason, seller: currentSeller(), createdAt: new Date().toISOString() },
+      move: {
+        id: newLedgerId("M"),
+        stockId: item.id,
+        date: nowParts().date,
+        delta,
+        reason,
+        seller: currentSeller(),
+        createdAt: new Date().toISOString(),
+        ...(inSerials.length ? { serialsIn: inSerials } : {}),
+        ...(sign === -1 && outSerials.length ? { serialsOut: outSerials } : {}),
+      },
     });
     onSaved(`الكمية ولات ${item.quantity + delta}`);
     onClose();
@@ -417,9 +554,51 @@ function AdjustForm({
             − نقص
           </button>
         </div>
-        <Field id="adj-amount" label="شحال" error={error}>
-          <input id="adj-amount" inputMode="numeric" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} autoFocus />
-        </Field>
+        {sign === 1 && (
+          <Field
+            id="adj-serials"
+            label="الأرقام التسلسلية (S/N) ديال اللي وصلو"
+            hint={inSerials.length ? `${inSerials.length} S/N = ${inSerials.length} وحدة` : tracked ? "وحدة فكل سطر · سكاني ولا كتب" : "اختياري · وحدة فكل سطر"}
+            wide
+          >
+            <div className="code-row">
+              <textarea id="adj-serials" dir="ltr" rows={3} value={serialsText} onChange={(e) => setSerialsText(e.target.value)} autoFocus={tracked} />
+              <button type="button" className="btn" onClick={() => setScanningSerial(true)} aria-label="سكاني S/N بالكاميرا">
+                📷
+              </button>
+            </div>
+          </Field>
+        )}
+        {sign === -1 && tracked ? (
+          <div className="field wide">
+            <span>اختار الـ S/N اللي خرجو</span>
+            <ul className="serial-pick">
+              {item.serials.map((x) => (
+                <li key={x}>
+                  <label className="check" dir="ltr">
+                    <input
+                      type="checkbox"
+                      checked={outSerials.includes(x)}
+                      onChange={(e) => setOutSerials((l) => (e.target.checked ? [...l, x] : l.filter((y) => y !== x)))}
+                    />
+                    {x}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          !bySerial && (
+            <Field id="adj-amount" label="شحال" error={error}>
+              <input id="adj-amount" inputMode="numeric" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} autoFocus={!tracked} />
+            </Field>
+          )
+        )}
+        {bySerial && error && (
+          <p className="alert error wide" role="alert">
+            {error}
+          </p>
+        )}
         <Field id="adj-reason" label="السبب">
           <select id="adj-reason" value={reason} onChange={(e) => setReason(e.target.value)}>
             {REASONS.map((r) => (
@@ -434,11 +613,27 @@ function AdjustForm({
               <li key={m.id}>
                 <span dir="ltr">{m.delta > 0 ? `+${m.delta}` : m.delta}</span> · {m.reason} · {displayDate(m.date)}
                 {m.seller ? ` · ${m.seller}` : ""}
+                {m.serialsIn?.length || m.serialsOut?.length ? (
+                  <>
+                    {" · "}
+                    <bdi dir="ltr">{[...(m.serialsIn ?? []), ...(m.serialsOut ?? [])].join(", ")}</bdi>
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
       </form>
+      {scanningSerial && (
+        <BarcodeScanner
+          title="📷 سكاني S/N"
+          onClose={() => setScanningSerial(false)}
+          onResult={(c) => {
+            setSerialsText((t) => (t.trim() ? `${t.trim()}\n${c}` : c));
+            setScanningSerial(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }
