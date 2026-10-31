@@ -4,9 +4,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import { money } from "@/lib/format";
 import { newLedgerId, nowParts } from "@/lib/ledger";
 import { displayDate, displayDateTime } from "@/lib/receipt";
-import { cashDay, round2 } from "@/lib/shop";
+import { cashDay, currentSeller, round2 } from "@/lib/shop";
 import { Modal } from "./Modal";
-import { readSeller } from "./SaleForm";
 import type { LedgerState } from "./useLedger";
 import { Field, parseAmount } from "./ui";
 
@@ -102,7 +101,8 @@ export function CaisseView({ data, onToast }: { data: LedgerState; onToast: (msg
               return (
                 <li key={k.id} className="closing">
                   <p>
-                    <strong>{k.time}</strong> · {k.clerk || "—"}
+                    <strong>{k.time}</strong>
+                    {k.clerk ? ` · ${k.clerk}` : ""}
                   </p>
                   <p className="small">
                     دخل {money(round2(k.cashSales + k.advances + k.installments))} − مصاريف {money(k.expenses)}
@@ -172,7 +172,7 @@ function CloseForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [v, setV] = useState({ clerk: readSeller(), expenses: "", expensesNote: "", counted: "", notes: "" });
+  const [v, setV] = useState({ expenses: "", expensesNote: "", counted: "", notes: "" });
   const [error, setError] = useState("");
   const expenses = parseAmount(v.expenses || "0");
   const expected = round2(totals.incoming - (expenses || 0));
@@ -182,7 +182,6 @@ function CloseForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!v.clerk.trim()) return setError("سمية البائع ضرورية");
     if (!(expenses >= 0)) return setError("المصاريف غير صحيحة");
     if (counted !== null && !(counted >= 0)) return setError("المبلغ المحسوب غير صحيح");
     const now = nowParts();
@@ -192,7 +191,7 @@ function CloseForm({
         id: newLedgerId("K"),
         date,
         time: now.time,
-        clerk: v.clerk.trim(),
+        clerk: currentSeller(),
         cashSales: totals.cashSales,
         advances: totals.advances,
         installments: totals.installments,
@@ -235,9 +234,6 @@ function CloseForm({
           <dt className="strong">الصافي فالقجر</dt>
           <dd className="strong">{money(expected)}</dd>
         </dl>
-        <Field id="cl-clerk" label="البائع">
-          <input id="cl-clerk" value={v.clerk} onChange={(e) => set("clerk")(e.target.value)} />
-        </Field>
         <Field id="cl-expenses" label="مصاريف المحل" hint="درهم (قهوة، نقل، كرا…)">
           <input id="cl-expenses" inputMode="decimal" dir="ltr" value={v.expenses} onChange={(e) => set("expenses")(e.target.value)} />
         </Field>

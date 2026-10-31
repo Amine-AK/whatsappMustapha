@@ -59,18 +59,24 @@ export function searchStock(stock: StockItem[], query: string, limit = 8): Stock
     .map((x) => x.item);
 }
 
-/** Small items sold every day, often without a stock card: one tap adds them. */
-export const QUICK_ITEMS: { item: string; category: string; price: number }[] = [
-  { item: "شارجور Type-C", category: "إكسسوارات وكابلات", price: 50 },
-  { item: "كابل Lightning", category: "إكسسوارات وكابلات", price: 40 },
-  { item: "تيليكوموند", category: "إكسسوارات وكابلات", price: 50 },
-  { item: "تركيب زجاجة", category: "ريباراسيون", price: 30 },
-];
-
-/** The stock card of a quick item, when there is one with the same name. */
-export function stockFor(stock: StockItem[], name: string): StockItem | undefined {
+/** Icon of a product family, for the big buttons of the sale screen. */
+export function categoryIcon(name: string): string {
   const n = normalizeText(name);
-  return stock.find((s) => normalizeText(s.item) === n);
+  if (/كهرومنزل|ثلاج|غسال/.test(n)) return "🧊";
+  if (/هاتف|هواتف|تيليفون|طابليط|اجهزه/.test(n)) return "📱";
+  if (/اكسسوار|كابل|شارج/.test(n)) return "🔌";
+  if (/ريبار|اصلاح|صيانه/.test(n)) return "🛠️";
+  if (/اواني|كوزين|مطبخ/.test(n)) return "🍳";
+  if (/تلفز|تيلفز|شاش/.test(n)) return "📺";
+  return "📦";
+}
+
+/**
+ * Who is selling. Empty until worker accounts exist; then it will be the
+ * logged-in worker, saved with every sale, stock change and drawer closing.
+ */
+export function currentSeller(): string {
+  return "";
 }
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;

@@ -111,16 +111,16 @@ was set up before them):
 | `الصندوق اليومي` | drawer closing: cash in, expenses, expected, counted, difference |
 
 - **البيع (sale):** 💵 cash (no customer) or 📒 credit (a customer's account, with
-  an optional advance). Search products as you type (`ip 11` finds
-  `iPhone 11 64GB`), tap quick items (charger, cable, remote, screen protector),
-  or type anything that isn't in stock. The price can be changed (discount); the
+  an optional advance). Big buttons for the product families (🧊 📱 🔌 🛠️ 🍳):
+  tap one to list its products in stock (and «حاجة أخرى» for something not in
+  stock, like a repair), or search as you type (`ip 11` finds `iPhone 11 64GB`). The price can be changed (discount); the
   cost and profit are shown, and a price under cost is refused. «شراء جديد» in a
   customer's account uses the same form, so every sale is in the reports.
   A cash sale prints a «وصل البيع» ticket.
 - **المخزون (stock):** a sale takes the product out of stock; cancelling it
   (in التقارير) puts it back. Quantity changes by hand are differences
   (+3 delivered, −1 lost), so counts from two phones add up, and each one is
-  logged with its reason and the seller.
+  logged with its reason.
 - **الصندوق (cash drawer):** money in for the day = cash sales + credit advances
   + instalments. «إغلاق الصندوق» records the expenses and the cash actually
   counted; the sheet keeps the expected amount and the difference, so the owner
@@ -131,11 +131,12 @@ was set up before them):
   are counted apart), cash vs credit, units sold per product, chart per day or
   month. A credit sale counts on the day it is sold.
 
-The seller's name is remembered on each phone and saved with every sale.
+No name to type: the seller column stays empty until worker accounts are added
+(`currentSeller()` in `src/lib/shop.ts`).
 
 **New customer (+ زبون جديد)** takes 3 short steps: name and phone only →
 «واش بغيتي تزيد ليه بيعة دابا؟» → the sale, for that customer, from one input:
-tap it to see what is in stock (best sellers first) or type to search. A
+the family buttons or the search bar. A
 customer without an instalment gets one with their first sale (amount suggested
 over ~10 months, period, next due date). «لا، من بعد» opens the customer's
 account; until they buy something they are under «الكل».

@@ -13,7 +13,7 @@ import {
   type StockItem,
 } from "@/lib/ledger";
 import { formatMoroccoPhone, isManualPeriod, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
-import { marginCheck, QUICK_ITEMS, round2, searchStock, stockFor } from "@/lib/shop";
+import { categoryIcon, currentSeller, marginCheck, round2, searchStock } from "@/lib/shop";
 import type { LedgerState } from "./useLedger";
 import { ClientPicker, Field, parseAmount } from "./ui";
 
@@ -37,22 +37,6 @@ export interface SaleDone {
   ticket: string;
   clientId?: string;
   paymentId?: string;
-}
-
-const SELLER_KEY = "seller-name";
-
-export function readSeller(): string {
-  try {
-    return localStorage.getItem(SELLER_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function saveSeller(name: string) {
-  try {
-    localStorage.setItem(SELLER_KEY, name);
-  } catch {}
 }
 
 const roundUp50 = (n: number) => Math.ceil(n / 50) * 50;
@@ -79,7 +63,8 @@ export function SaleForm({
   const [type, setType] = useState<SaleType>(lockedClientId ? "كريدي" : initialType);
   const [query, setQuery] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
-  const [seller, setSeller] = useState(readSeller);
+  /** Family chosen with the big buttons: its products are listed. */
+  const [cat, setCat] = useState("");
   const [error, setError] = useState("");
   // Cash
   const [given, setGiven] = useState("");
@@ -95,17 +80,26 @@ export function SaleForm({
   const [open, setOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const results = useMemo(() => searchStock(ledger.stock, query), [ledger.stock, query]);
-  // Before anything is typed: what is in stock, best sellers first.
+  const results = useMemo(
+    () => searchStock(ledger.stock, query, 60).filter((s) => !cat || s.category === cat).slice(0, 12),
+    [ledger.stock, query, cat],
+  );
+  // Before anything is typed: the chosen family, or what sells most.
   const browse = useMemo(() => {
     const sold = new Map<string, number>();
     for (const s of ledger.sales) if (s.stockId) sold.set(s.stockId, (sold.get(s.stockId) ?? 0) + s.quantity);
     return ledger.stock
-      .filter((s) => s.quantity > 0)
-      .sort((a, b) => (sold.get(b.id) ?? 0) - (sold.get(a.id) ?? 0) || a.item.localeCompare(b.item, "ar"))
-      .slice(0, 8);
-  }, [ledger.stock, ledger.sales]);
+      .filter((s) => (cat ? s.category === cat : s.quantity > 0))
+      .sort((a, b) => Number(b.quantity > 0) - Number(a.quantity > 0) || (sold.get(b.id) ?? 0) - (sold.get(a.id) ?? 0) || a.item.localeCompare(b.item, "ar"))
+      .slice(0, cat ? 40 : 8);
+  }, [ledger.stock, ledger.sales, cat]);
   const shown = query.trim() ? results : browse;
+  const inStock = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of ledger.stock) if (s.quantity > 0) m.set(s.category, (m.get(s.category) ?? 0) + 1);
+    return m;
+  }, [ledger.stock]);
+  const listOpen = open || cat !== "";
   const categories = ledger.categories;
   const summary = data.summaries.find((s) => s.client.id === clientId);
 
@@ -130,6 +124,7 @@ export function SaleForm({
     setQuery("");
     setError("");
     setOpen(false);
+    setCat("");
   }
 
   function addFree(item: string, category = "", price = 0) {
@@ -137,12 +132,7 @@ export function SaleForm({
     setQuery("");
     setError("");
     setOpen(false);
-  }
-
-  function quick(q: (typeof QUICK_ITEMS)[number]) {
-    const s = stockFor(ledger.stock, q.item);
-    if (s) addStock(s);
-    else addFree(q.item, q.category, q.price);
+    setCat("");
   }
 
   const update = (key: string, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -189,7 +179,6 @@ export function SaleForm({
     const err = validate();
     setError(err);
     if (err) return;
-    saveSeller(seller.trim());
     const at = new Date().toISOString();
     const { date, time } = nowParts();
     const ticket = newLedgerId("V");
@@ -233,7 +222,7 @@ export function SaleForm({
         type,
         clientId: type === "كريدي" ? customer!.id : "",
         purchaseId,
-        seller: seller.trim(),
+        seller: currentSeller(),
         notes: "",
         createdAt: at,
         updatedAt: at,
@@ -323,6 +312,27 @@ export function SaleForm({
         </section>
       )}
 
+      <div className="cat-tiles" role="group" aria-label="الأصناف">
+        {ledger.categories.map((c) => (
+          <button
+            key={c.name}
+            type="button"
+            className={`cat-tile ${cat === c.name ? "on" : ""}`}
+            aria-pressed={cat === c.name}
+            onClick={() => {
+              setCat((x) => (x === c.name ? "" : c.name));
+              setQuery("");
+            }}
+          >
+            <span className="cat-icon" aria-hidden="true">
+              {categoryIcon(c.name)}
+            </span>
+            <span className="cat-name">{c.name}</span>
+            <span className="cat-count">{inStock.get(c.name) ?? 0} متوفر</span>
+          </button>
+        ))}
+      </div>
+
       <div className="product-search">
         <label className="visually-hidden" htmlFor="sale-search">
           قلب على سلعة
@@ -332,7 +342,7 @@ export function SaleForm({
           id="sale-search"
           type="search"
           className="search"
-          placeholder="ضغط هنا ولا كتب: ip 11، شارجور، ثلاجة…"
+          placeholder={cat ? `قلب فـ ${cat}…` : "🔍 قلب على سلعة: ip 11، شارجور، ثلاجة…"}
           value={query}
           autoComplete="off"
           role="combobox"
@@ -345,19 +355,32 @@ export function SaleForm({
             setOpen(true);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") return setOpen(false);
+            if (e.key === "Escape") {
+              setCat("");
+              return setOpen(false);
+            }
             if (e.key !== "Enter") return;
             e.preventDefault();
             if (shown[0]) addStock(shown[0]);
             else if (query.trim()) addFree(query.trim());
           }}
         />
-        {open && (
+        {listOpen && (
           // Keep the focus in the input while tapping a result.
           <ul id="sale-results" className="product-results" role="listbox" aria-label="السلع" onPointerDown={(e) => e.preventDefault()}>
-            {!query.trim() && (
-              <li className="pr-hint muted small">{browse.length ? "اللي كاين فالمخزون (الأكثر مبيعا) · ولا كتب باش تقلب" : "المخزون خاوي · كتب سمية السلعة"}</li>
+            {cat ? (
+              <li className="pr-head">
+                <strong>
+                  {categoryIcon(cat)} {cat}
+                </strong>
+                <button type="button" className="icon-btn" aria-label="سد" onClick={() => setCat("")}>
+                  ✕
+                </button>
+              </li>
+            ) : (
+              !query.trim() && <li className="pr-hint muted small">{browse.length ? "الأكثر مبيعا · ولا كتب باش تقلب" : "المخزون خاوي · كتب سمية السلعة"}</li>
             )}
+            {cat && !query.trim() && browse.length === 0 && <li className="pr-hint muted small">ما كاين حتى سلعة فهاد الصنف فالمخزون</li>}
             {query.trim() && results.length === 0 && <li className="pr-hint muted small">ما كايناش فالمخزون</li>}
             {shown.map((s) => (
               <li key={s.id}>
@@ -377,10 +400,10 @@ export function SaleForm({
                 </button>
               </li>
             ))}
-            {query.trim() && (
+            {(query.trim() || cat) && (
               <li>
-                <button type="button" className="pr-free" onClick={() => addFree(query.trim())}>
-                  ＋ زيد «{query.trim()}» بلا مخزون
+                <button type="button" className="pr-free" onClick={() => addFree(query.trim(), cat)}>
+                  {query.trim() ? `＋ زيد «${query.trim()}» بلا مخزون` : `＋ حاجة أخرى فـ ${cat} (بلا مخزون)`}
                 </button>
               </li>
             )}
@@ -388,18 +411,9 @@ export function SaleForm({
         )}
       </div>
 
-      {!lockedClientId && (
-        <div className="chips quick-chips" role="group" aria-label="سلع سريعة">
-          {QUICK_ITEMS.map((q) => (
-            <button key={q.item} type="button" className="chip" onClick={() => quick(q)}>
-              ＋ {q.item}
-            </button>
-          ))}
-        </div>
-      )}
 
       {lines.length === 0 ? (
-        <p className="empty small">{lockedClientId ? "ضغط على الخانة لفوق باش تختار السلعة." : "قلب على سلعة ولا ضغط على وحدة من الفوق."}</p>
+        <p className="empty small">اختار صنف من الفوق ولا قلب على السلعة.</p>
       ) : (
         <ul className="cart">
           {lines.map((l) => {
@@ -557,10 +571,6 @@ export function SaleForm({
             </label>
           )}
         </div>
-        <label className="seller">
-          <span className="muted small">البائع</span>
-          <input value={seller} placeholder="سميتك" onChange={(e) => setSeller(e.target.value)} />
-        </label>
         {error && (
           <p className="alert error" role="alert">
             {error}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyOp, emptyLedger, summarizeClient, type Ledger, type LedgerOp, type Purchase, type Sale, type StockItem } from "./ledger";
 import { ledgerToRows, rowsToLedger, TABS } from "./ledger-sheet";
-import { cashDay, filterSales, marginCheck, normalizeText, rangeOf, report, searchStock } from "./shop";
+import { cashDay, categoryIcon, filterSales, marginCheck, normalizeText, rangeOf, report, searchStock } from "./shop";
 
 const AT = "2026-10-20T09:00:00.000Z";
 let n = 0;
@@ -46,6 +46,10 @@ describe("product search", () => {
     expect(searchStock([iphone, charger, fridge], "64")[0].id).toBe("I-IPHONE11");
     expect(searchStock([iphone, charger, fridge], "345678")[0].id).toBe("I-IPHONE11");
     expect(normalizeText("إصلاحٌ  الشاشة")).toBe("اصلاح الشاشه");
+  });
+
+  it("gives each family an icon", () => {
+    expect(["كهرومنزلي كبير", "هواتف وأجهزة", "إكسسوارات وكابلات", "ريباراسيون", "أواني منزلية", "شي حاجة أخرى"].map(categoryIcon)).toEqual(["🧊", "📱", "🔌", "🛠️", "🍳", "📦"]);
   });
 
   it("warns below cost or under the family's margin", () => {

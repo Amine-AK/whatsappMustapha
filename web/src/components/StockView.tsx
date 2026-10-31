@@ -4,9 +4,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import { money } from "@/lib/format";
 import { CONDITIONS, newLedgerId, nowParts, type Condition, type StockItem } from "@/lib/ledger";
 import { displayDate } from "@/lib/receipt";
-import { normalizeText, round2, searchStock } from "@/lib/shop";
+import { currentSeller, normalizeText, round2, searchStock } from "@/lib/shop";
 import { Modal } from "./Modal";
-import { readSeller } from "./SaleForm";
 import type { LedgerState } from "./useLedger";
 import { Confirm, Field, parseAmount } from "./ui";
 
@@ -295,7 +294,7 @@ function AdjustForm({ data, item, onClose, onSaved }: { data: LedgerState; item:
     const delta = sign * qty;
     data.run(`${delta > 0 ? "+" : ""}${delta} · ${item.item}`, {
       type: "stock.adjust",
-      move: { id: newLedgerId("M"), stockId: item.id, date: nowParts().date, delta, reason, seller: readSeller(), createdAt: new Date().toISOString() },
+      move: { id: newLedgerId("M"), stockId: item.id, date: nowParts().date, delta, reason, seller: currentSeller(), createdAt: new Date().toISOString() },
     });
     onSaved(`الكمية ولات ${item.quantity + delta}`);
     onClose();
