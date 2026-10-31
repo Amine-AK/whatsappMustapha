@@ -1,19 +1,27 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { money } from "@/lib/format";
 import { CONDITIONS, newLedgerId, nowParts, type Condition, type StockItem } from "@/lib/ledger";
 import { displayDate } from "@/lib/receipt";
-import { normalizeText, round2, searchStock } from "@/lib/shop";
+import { currentSeller, findByCode, normalizeText, round2, searchStock } from "@/lib/shop";
+import { fixAzertyDigits } from "@/lib/scanner-input";
+import { BarcodeScanner } from "./BarcodeScanner";
+import { useScannerInput } from "./useScannerInput";
 import { Modal } from "./Modal";
-import { readSeller } from "./SaleForm";
 import type { LedgerState } from "./useLedger";
 import { Confirm, Field, parseAmount } from "./ui";
 
 const LOW = 1;
 const REASONS = ["وصلات السلعة", "جرد (تصحيح)", "خاسرة / ضايعة", "رجعات من الزبون", "رجعت للمورد"];
 
-type Sub = { kind: "add" } | { kind: "edit"; item: StockItem } | { kind: "adjust"; item: StockItem } | { kind: "delete"; item: StockItem } | null;
+type Sub =
+  | { kind: "add"; code?: string }
+  | { kind: "edit"; item: StockItem }
+  | { kind: "adjust"; item: StockItem; scanned?: boolean }
+  | { kind: "delete"; item: StockItem }
+  | { kind: "scan" }
+  | null;
 
 export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg: string) => void }) {
   const ledger = data.ledger!;
@@ -21,6 +29,16 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const [category, setCategory] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
   const [sub, setSub] = useState<Sub>(null);
+
+  const viewRef = useRef<HTMLDivElement>(null);
+
+  /** Scanned (camera or USB scanner): more of a known product, or a new card with the code. */
+  function scanned(code: string) {
+    const found = findByCode(ledger.stock, code);
+    setQuery("");
+    setSub(found ? { kind: "adjust", item: found, scanned: true } : { kind: "add", code });
+  }
+  useScannerInput(scanned, viewRef);
 
   const list = useMemo(() => {
     let items = query.trim() ? searchStock(ledger.stock, query, 500) : [...ledger.stock].sort((a, b) => a.item.localeCompare(b.item, "ar"));
@@ -34,7 +52,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const units = ledger.stock.reduce((t, s) => t + Math.max(0, s.quantity), 0);
 
   return (
-    <div className="view">
+    <div className="view" ref={viewRef}>
       <section className="summary" aria-label="ملخص المخزون">
         <div className="stat">
           <span className="stat-label">السلع</span>
@@ -54,6 +72,9 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
       </section>
 
       <div className="actions-row in-flow">
+        <button type="button" className="btn" onClick={() => setSub({ kind: "scan" })}>
+          📷 سكاني
+        </button>
         <button type="button" className="btn primary" onClick={() => setSub({ kind: "add" })}>
           ＋ سلعة جديدة
         </button>
@@ -63,7 +84,23 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         <label className="visually-hidden" htmlFor="stock-search">
           قلب فالمخزون
         </label>
-        <input id="stock-search" type="search" className="search" placeholder="قلب بالسمية، الفئة ولا IMEI…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input
+          id="stock-search"
+          type="search"
+          className="search"
+          placeholder="قلب بالسمية، الفئة ولا الكود…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            // A code scanned into the search field: same as scanning with the camera.
+            const code = fixAzertyDigits(query);
+            if (findByCode(ledger.stock, code) || (/^[\w-]{6,}$/.test(code) && !list.length)) {
+              e.preventDefault();
+              scanned(code);
+            }
+          }}
+        />
         <button type="button" className={`btn ${onlyLow ? "selected" : ""}`} aria-pressed={onlyLow} onClick={() => setOnlyLow((x) => !x)}>
           ⚠️ قليلة
         </button>
@@ -112,6 +149,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         <StockForm
           data={data}
           item={sub.kind === "edit" ? sub.item : undefined}
+          code={sub.kind === "add" ? sub.code : undefined}
           onClose={() => setSub(null)}
           onDelete={sub.kind === "edit" ? () => setSub({ kind: "delete", item: sub.item }) : undefined}
           onSaved={(msg) => {
@@ -120,7 +158,14 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           }}
         />
       )}
-      {sub?.kind === "adjust" && <AdjustForm data={data} item={sub.item} onClose={() => setSub(null)} onSaved={onToast} />}
+      {sub?.kind === "adjust" && <AdjustForm data={data} item={sub.item} scanned={sub.scanned} onClose={() => setSub(null)} onSaved={onToast} />}
+      {sub?.kind === "scan" && (
+        <BarcodeScanner
+          title="📷 سكاني السلعة"
+          onClose={() => setSub(null)}
+          onResult={scanned}
+        />
+      )}
       {sub?.kind === "delete" && (
         <Confirm
           title="حذف السلعة"
@@ -145,12 +190,15 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
 function StockForm({
   data,
   item,
+  code,
   onClose,
   onSaved,
   onDelete,
 }: {
   data: LedgerState;
   item?: StockItem;
+  /** Scanned before opening the form. */
+  code?: string;
   onClose: () => void;
   onSaved: (msg: string) => void;
   onDelete?: () => void;
@@ -164,7 +212,7 @@ function StockForm({
     buyPrice: item ? String(item.buyPrice) : "",
     sellPrice: item ? String(item.sellPrice) : "",
     quantity: "1",
-    serial: item?.serial ?? "",
+    serial: item?.serial ?? code ?? "",
     notes: item?.notes ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -177,6 +225,8 @@ function StockForm({
   const target = ledger.categories.find((c) => c.name === categoryName)?.marginTarget ?? 0;
   const buy = parseAmount(v.buyPrice || "0");
   const suggested = buy > 0 && target > 0 ? Math.ceil((buy * (1 + target / 100)) / 10) * 10 : 0;
+  const [scanning, setScanning] = useState(false);
+  const sameCode = v.serial.trim() ? ledger.stock.find((s) => s.id !== item?.id && s.serial.trim().toLowerCase() === v.serial.trim().toLowerCase()) : undefined;
   const duplicate = !item && v.item.trim() && ledger.stock.find((s) => normalizeText(s.item) === normalizeText(v.item) && s.condition === v.condition);
 
   function submit(e: FormEvent) {
@@ -195,7 +245,7 @@ function StockForm({
     const ops: Parameters<LedgerState["run"]>[1][] = [];
     if (isNewCategory) ops.push({ type: "category.save", category: { name: categoryName, description: "", marginTarget: 0 } });
     const at = new Date().toISOString();
-    const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: v.serial.trim(), notes: v.notes.trim() };
+    const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: fixAzertyDigits(v.serial), notes: v.notes.trim() };
     if (item) {
       ops.push({ type: "stock.update", id: item.id, base: item.updatedAt, patch: fields });
       data.run(`تعديل سلعة · ${fields.item}`, ...ops);
@@ -222,6 +272,13 @@ function StockForm({
       }
     >
       <form id="stock-form" className="form-grid" noValidate onSubmit={submit}>
+        {code && !item && (
+          <p className="alert info wide">
+            <span>
+              ✓ تسكانا الكود <bdi dir="ltr">{code}</bdi> · هاد السلعة جديدة، كمل المعلومات ديالها.
+            </span>
+          </p>
+        )}
         <Field id="st-item" label="السلعة" error={errors.item} hint="مثلا: iPhone 11 64GB، ثلاجة Samsung 400L" wide>
           <input id="st-item" value={v.item} onChange={(e) => set("item")(e.target.value)} autoFocus={!item} />
         </Field>
@@ -260,8 +317,18 @@ function StockForm({
             <input id="st-quantity" inputMode="numeric" dir="ltr" value={v.quantity} onChange={(e) => set("quantity")(e.target.value.replace(/\D/g, ""))} />
           </Field>
         )}
-        <Field id="st-serial" label="السيريال / IMEI" hint="اختياري">
-          <input id="st-serial" dir="ltr" value={v.serial} onChange={(e) => set("serial")(e.target.value)} />
+        <Field
+          id="st-serial"
+          label="الباركود / IMEI"
+          hint={sameCode ? `⚠️ هاد الكود عند: ${sameCode.item}` : code ? "✓ تسكانا" : "اختياري · سكاني ولا كتب"}
+          wide
+        >
+          <div className="code-row">
+            <input id="st-serial" dir="ltr" value={v.serial} onChange={(e) => set("serial")(e.target.value)} />
+            <button type="button" className="btn" onClick={() => setScanning(true)} aria-label="سكاني الكود بالكاميرا">
+              📷
+            </button>
+          </div>
         </Field>
         <Field id="st-notes" label="ملاحظات" wide>
           <input id="st-notes" value={v.notes} onChange={(e) => set("notes")(e.target.value)} />
@@ -277,11 +344,32 @@ function StockForm({
           </button>
         )}
       </form>
+      {scanning && (
+        <BarcodeScanner
+          onClose={() => setScanning(false)}
+          onResult={(c) => {
+            set("serial")(c);
+            setScanning(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }
 
-function AdjustForm({ data, item, onClose, onSaved }: { data: LedgerState; item: StockItem; onClose: () => void; onSaved: (msg: string) => void }) {
+function AdjustForm({
+  data,
+  item,
+  scanned,
+  onClose,
+  onSaved,
+}: {
+  data: LedgerState;
+  item: StockItem;
+  scanned?: boolean;
+  onClose: () => void;
+  onSaved: (msg: string) => void;
+}) {
   const [sign, setSign] = useState<1 | -1>(1);
   const [amount, setAmount] = useState("1");
   const [reason, setReason] = useState(REASONS[0]);
@@ -295,7 +383,7 @@ function AdjustForm({ data, item, onClose, onSaved }: { data: LedgerState; item:
     const delta = sign * qty;
     data.run(`${delta > 0 ? "+" : ""}${delta} · ${item.item}`, {
       type: "stock.adjust",
-      move: { id: newLedgerId("M"), stockId: item.id, date: nowParts().date, delta, reason, seller: readSeller(), createdAt: new Date().toISOString() },
+      move: { id: newLedgerId("M"), stockId: item.id, date: nowParts().date, delta, reason, seller: currentSeller(), createdAt: new Date().toISOString() },
     });
     onSaved(`الكمية ولات ${item.quantity + delta}`);
     onClose();
@@ -317,6 +405,7 @@ function AdjustForm({ data, item, onClose, onSaved }: { data: LedgerState; item:
       }
     >
       <form id="adjust-form" className="form-grid" noValidate onSubmit={submit}>
+        {scanned && <p className="alert info wide">✓ هاد السلعة كاينة فالمخزون. شحال وصلات منها؟</p>}
         <p className="lead wide">
           دابا: <strong>{item.quantity}</strong> ← من بعد: <strong>{Number.isInteger(qty) && qty > 0 ? item.quantity + sign * qty : "—"}</strong>
         </p>

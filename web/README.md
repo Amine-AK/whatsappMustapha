@@ -111,16 +111,30 @@ was set up before them):
 | `الصندوق اليومي` | drawer closing: cash in, expenses, expected, counted, difference |
 
 - **البيع (sale):** 💵 cash (no customer) or 📒 credit (a customer's account, with
-  an optional advance). Search products as you type (`ip 11` finds
-  `iPhone 11 64GB`), tap quick items (charger, cable, remote, screen protector),
-  or type anything that isn't in stock. The price can be changed (discount); the
+  an optional advance). Big buttons for the product families (🧊 📱 🔌 🛠️ 🍳):
+  tap one to list its products in stock (and «حاجة أخرى» for something not in
+  stock, like a repair), or search as you type (`ip 11` finds `iPhone 11 64GB`). The price can be changed (discount); the
   cost and profit are shown, and a price under cost is refused. «شراء جديد» in a
   customer's account uses the same form, so every sale is in the reports.
   A cash sale prints a «وصل البيع» ticket.
+- **📷 Scanning (QR / barcode):** «📷 سكاني» in المخزون opens the camera. A
+  code already in stock asks how many arrived (+1); a new code opens «سلعة
+  جديدة» with it filled in. 📷 in the البيع search bar puts the scanned product
+  in the sale. The code is kept in the «الباركود / IMEI» column. Works with
+  the phone camera and with a PC webcam: phones use the browser's built-in
+  reader; PCs and iPhones download a reader (`@zxing/library`, ~450 KB) the
+  first time the scanner opens. The code can also be typed.
+- **USB / Bluetooth barcode scanner:** no need to click anything first. In
+  البيع a scan puts the product in the sale (scan twice = quantity 2); in
+  المخزون it asks «شحال وصلات منها؟» for a known product or opens «سلعة جديدة»
+  with the code. Works on AZERTY (French) PCs too: the app reads the physical
+  keys, and repairs codes scanned into a field («é&ç…» → «219…»). A scan is
+  ignored while a window (receipt, form) is open, and its Enter never presses
+  a button. Scanners must end each code with Enter (the factory default).
 - **المخزون (stock):** a sale takes the product out of stock; cancelling it
   (in التقارير) puts it back. Quantity changes by hand are differences
   (+3 delivered, −1 lost), so counts from two phones add up, and each one is
-  logged with its reason and the seller.
+  logged with its reason.
 - **الصندوق (cash drawer):** money in for the day = cash sales + credit advances
   + instalments. «إغلاق الصندوق» records the expenses and the cash actually
   counted; the sheet keeps the expected amount and the difference, so the owner
@@ -131,7 +145,15 @@ was set up before them):
   are counted apart), cash vs credit, units sold per product, chart per day or
   month. A credit sale counts on the day it is sold.
 
-The seller's name is remembered on each phone and saved with every sale.
+No name to type: the seller column stays empty until worker accounts are added
+(`currentSeller()` in `src/lib/shop.ts`).
+
+**New customer (+ زبون جديد)** takes 3 short steps: name and phone only →
+«واش بغيتي تزيد ليه بيعة دابا؟» → the sale, for that customer, from one input:
+the family buttons or the search bar. A
+customer without an instalment gets one with their first sale (amount suggested
+over ~10 months, period, next due date). «لا، من بعد» opens the customer's
+account; until they buy something they are under «الكل».
 
 ## 1. Google Sheets access (once)
 

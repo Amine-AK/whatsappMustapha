@@ -12,8 +12,11 @@ import {
   type SaleType,
   type StockItem,
 } from "@/lib/ledger";
-import { formatMoroccoPhone, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
-import { marginCheck, QUICK_ITEMS, round2, searchStock, stockFor } from "@/lib/shop";
+import { formatMoroccoPhone, isManualPeriod, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
+import { categoryIcon, currentSeller, findByCode, marginCheck, round2, searchStock } from "@/lib/shop";
+import { fixAzertyDigits } from "@/lib/scanner-input";
+import { BarcodeScanner } from "./BarcodeScanner";
+import { useScannerInput } from "./useScannerInput";
 import type { LedgerState } from "./useLedger";
 import { ClientPicker, Field, parseAmount } from "./ui";
 
@@ -37,22 +40,6 @@ export interface SaleDone {
   ticket: string;
   clientId?: string;
   paymentId?: string;
-}
-
-const SELLER_KEY = "seller-name";
-
-export function readSeller(): string {
-  try {
-    return localStorage.getItem(SELLER_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function saveSeller(name: string) {
-  try {
-    localStorage.setItem(SELLER_KEY, name);
-  } catch {}
 }
 
 const roundUp50 = (n: number) => Math.ceil(n / 50) * 50;
@@ -79,20 +66,45 @@ export function SaleForm({
   const [type, setType] = useState<SaleType>(lockedClientId ? "كريدي" : initialType);
   const [query, setQuery] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
-  const [seller, setSeller] = useState(readSeller);
+  /** Family chosen with the big buttons: its products are listed. */
+  const [cat, setCat] = useState("");
   const [error, setError] = useState("");
   // Cash
   const [given, setGiven] = useState("");
   // Credit
   const [clientId, setClientId] = useState(lockedClientId ?? "");
   const [newClient, setNewClient] = useState(false);
-  const [nc, setNc] = useState({ name: "", phone: "", installment: "", period: "شهر" });
+  const [nc, setNc] = useState({ name: "", phone: "" });
   const [advance, setAdvance] = useState("");
   const [changeInstallment, setChangeInstallment] = useState(false);
   const [newInstallment, setNewInstallment] = useState("");
+  // First instalment, for a customer who doesn't have one yet.
+  const [inst, setInst] = useState({ amount: "", period: "شهر", next: "", nextTouched: false });
+  const [open, setOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const results = useMemo(() => searchStock(ledger.stock, query), [ledger.stock, query]);
+  const results = useMemo(
+    () => searchStock(ledger.stock, query, 60).filter((s) => !cat || s.category === cat).slice(0, 12),
+    [ledger.stock, query, cat],
+  );
+  // Before anything is typed: the chosen family, or what sells most.
+  const browse = useMemo(() => {
+    const sold = new Map<string, number>();
+    for (const s of ledger.sales) if (s.stockId) sold.set(s.stockId, (sold.get(s.stockId) ?? 0) + s.quantity);
+    return ledger.stock
+      .filter((s) => (cat ? s.category === cat : s.quantity > 0))
+      .sort((a, b) => Number(b.quantity > 0) - Number(a.quantity > 0) || (sold.get(b.id) ?? 0) - (sold.get(a.id) ?? 0) || a.item.localeCompare(b.item, "ar"))
+      .slice(0, cat ? 40 : 8);
+  }, [ledger.stock, ledger.sales, cat]);
+  const shown = query.trim() ? results : browse;
+  const inStock = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of ledger.stock) if (s.quantity > 0) m.set(s.category, (m.get(s.category) ?? 0) + 1);
+    return m;
+  }, [ledger.stock]);
+  const listOpen = open || cat !== "";
   const categories = ledger.categories;
   const summary = data.summaries.find((s) => s.client.id === clientId);
 
@@ -116,19 +128,25 @@ export function SaleForm({
     });
     setQuery("");
     setError("");
-    searchRef.current?.focus();
+    setOpen(false);
+    setCat("");
   }
+
+  /** A code from the camera or a USB scanner: the product goes in the sale. */
+  function scanned(code: string) {
+    const found = findByCode(ledger.stock, code);
+    if (found) return addStock(found);
+    setQuery(code);
+    setError(`ما لقيناش الكود «${code}» فالمخزون. اختار السلعة ولا زيدها فالمخزون.`);
+  }
+  useScannerInput(scanned, formRef);
 
   function addFree(item: string, category = "", price = 0) {
     setLines((ls) => [...ls, { key: `L${++lineSeq}`, stockId: "", item, category, qty: 1, unitBuy: null, unitList: price, price: price ? String(price) : "", inStock: null }]);
     setQuery("");
     setError("");
-  }
-
-  function quick(q: (typeof QUICK_ITEMS)[number]) {
-    const s = stockFor(ledger.stock, q.item);
-    if (s) addStock(s);
-    else addFree(q.item, q.category, q.price);
+    setOpen(false);
+    setCat("");
   }
 
   const update = (key: string, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -142,6 +160,13 @@ export function SaleForm({
   const monthsAfter = c ? monthsToFinish(after, c.installment, c.period) : null;
   const perMonth = (period: string) => (period.includes("سيمانة") ? 4.33 : period.includes("15") ? 2 : 1);
   const suggested = c && after > 0 ? roundUp50(after / Math.max(3, monthsBefore || 0) / perMonth(c.period)) : 0;
+  // A customer without an instalment (new, or never set) gets one with this sale.
+  const firstInstalment = type === "كريدي" && (newClient || (c !== undefined && c.installment <= 0));
+  const owedAfter = newClient ? round2(total - (advanceAmount || 0)) : after;
+  const instSuggested = owedAfter > 0 && !isManualPeriod(inst.period) ? roundUp50(owedAfter / 10 / perMonth(inst.period)) : 0;
+  const instAmount = inst.amount.trim() ? parseAmount(inst.amount) : instSuggested;
+  const instNext = inst.nextTouched ? inst.next : nextDateForPeriod(inst.period, data.today);
+  const instMonths = monthsToFinish(owedAfter, instAmount || 0, inst.period);
 
   function validate(): string {
     if (!lines.length) return "زيد شي سلعة";
@@ -155,10 +180,10 @@ export function SaleForm({
       if (newClient) {
         if (!nc.name.trim()) return "سمية الزبون ضرورية";
         if (nc.phone.trim() && !isValidPhone(formatMoroccoPhone(nc.phone))) return "رقم الهاتف غير صحيح";
-        if (nc.installment && !(parseAmount(nc.installment) >= 0)) return "الطريطة غير صحيحة";
       } else if (!clientId) return "اختار الزبون";
       if (advance && !(advanceAmount >= 0)) return "التسبيق غير صحيح";
       if (advanceAmount > total) return "التسبيق كبر من المجموع";
+      if (firstInstalment && inst.amount.trim() && !(parseAmount(inst.amount) >= 0)) return "الطريطة غير صحيحة";
     }
     return "";
   }
@@ -168,7 +193,6 @@ export function SaleForm({
     const err = validate();
     setError(err);
     if (err) return;
-    saveSeller(seller.trim());
     const at = new Date().toISOString();
     const { date, time } = nowParts();
     const ticket = newLedgerId("V");
@@ -176,14 +200,13 @@ export function SaleForm({
 
     let customer: Client | undefined = summary?.client;
     if (type === "كريدي" && newClient) {
-      const installment = parseAmount(nc.installment || "0") || 0;
       customer = {
         id: newLedgerId("C"),
         name: nc.name.trim(),
         phone: nc.phone.trim(),
-        installment,
-        period: nc.period,
-        nextDueDate: nextDateForPeriod(nc.period, date),
+        installment: owedAfter > 0 ? instAmount || 0 : 0,
+        period: inst.period,
+        nextDueDate: owedAfter > 0 ? instNext : "",
         notes: "",
         createdAt: at,
         updatedAt: at,
@@ -213,7 +236,7 @@ export function SaleForm({
         type,
         clientId: type === "كريدي" ? customer!.id : "",
         purchaseId,
-        seller: seller.trim(),
+        seller: currentSeller(),
         notes: "",
         createdAt: at,
         updatedAt: at,
@@ -232,7 +255,15 @@ export function SaleForm({
         payment: { id: paymentId, clientId: customer!.id, purchaseId: purchases.length === 1 ? purchases[0].id : "", date, time, amount: advanceAmount, kind: "تسبيق", notes: "", createdAt: at, updatedAt: at },
       });
     }
-    if (type === "كريدي" && !newClient && changeInstallment && c) {
+    if (type === "كريدي" && !newClient && firstInstalment && c && owedAfter > 0 && instAmount > 0) {
+      ops.push({
+        type: "client.installment",
+        id: c.id,
+        base: c.updatedAt,
+        change: { id: newLedgerId("T"), clientId: c.id, date, oldAmount: 0, newAmount: instAmount, oldPeriod: c.period, newPeriod: inst.period, reason: `أول شراء: ${sales[0].item}`, createdAt: at },
+        nextDueDate: instNext,
+      });
+    } else if (type === "كريدي" && !newClient && changeInstallment && c) {
       const amount = parseAmount(newInstallment || String(suggested));
       if (amount > 0) {
         ops.push({
@@ -251,13 +282,15 @@ export function SaleForm({
     setChangeInstallment(false);
     setNewInstallment("");
     setNewClient(false);
-    setNc({ name: "", phone: "", installment: "", period: "شهر" });
+    setNc({ name: "", phone: "" });
+    setInst({ amount: "", period: "شهر", next: "", nextTouched: false });
     if (!lockedClientId) setClientId("");
     onDone({ type, ticket, clientId: customer?.id, paymentId });
   }
 
   return (
-    <form className="sale-form" onSubmit={submit} noValidate>
+    <>
+    <form ref={formRef} className="sale-form" onSubmit={submit} noValidate>
       {!lockedClientId && (
         <div className="segmented wide-seg sale-type" role="group" aria-label="نوع البيع">
           {(["كاش", "كريدي"] as SaleType[]).map((t) => (
@@ -278,16 +311,6 @@ export function SaleForm({
               <Field id="nc-phone" label="الهاتف">
                 <input id="nc-phone" inputMode="tel" dir="ltr" value={nc.phone} onChange={(e) => setNc({ ...nc, phone: e.target.value })} />
               </Field>
-              <Field id="nc-installment" label="الطريطة" hint="درهم">
-                <input id="nc-installment" inputMode="decimal" dir="ltr" value={nc.installment} onChange={(e) => setNc({ ...nc, installment: e.target.value })} />
-              </Field>
-              <Field id="nc-period" label="كل">
-                <select id="nc-period" value={nc.period} onChange={(e) => setNc({ ...nc, period: e.target.value })}>
-                  {PERIODS.map((p) => (
-                    <option key={p}>{p}</option>
-                  ))}
-                </select>
-              </Field>
               <button type="button" className="btn ghost wide" onClick={() => setNewClient(false)}>
                 ← زبون قديم
               </button>
@@ -304,29 +327,85 @@ export function SaleForm({
         </section>
       )}
 
+      <div className="cat-tiles" role="group" aria-label="الأصناف">
+        {ledger.categories.map((c) => (
+          <button
+            key={c.name}
+            type="button"
+            className={`cat-tile ${cat === c.name ? "on" : ""}`}
+            aria-pressed={cat === c.name}
+            onClick={() => {
+              setCat((x) => (x === c.name ? "" : c.name));
+              setQuery("");
+            }}
+          >
+            <span className="cat-icon" aria-hidden="true">
+              {categoryIcon(c.name)}
+            </span>
+            <span className="cat-name">{c.name}</span>
+            <span className="cat-count">{inStock.get(c.name) ?? 0} متوفر</span>
+          </button>
+        ))}
+      </div>
+
       <div className="product-search">
         <label className="visually-hidden" htmlFor="sale-search">
           قلب على سلعة
         </label>
+        <div className="code-row">
         <input
           ref={searchRef}
           id="sale-search"
           type="search"
           className="search"
-          placeholder="قلب على سلعة: ip 11، شارجور، ثلاجة…"
+          placeholder={cat ? `قلب فـ ${cat}…` : "🔍 قلب على سلعة: ip 11، شارجور، ثلاجة…"}
           value={query}
           autoComplete="off"
-          onChange={(e) => setQuery(e.target.value)}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls="sale-results"
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
           onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setCat("");
+              return setOpen(false);
+            }
             if (e.key !== "Enter") return;
             e.preventDefault();
-            if (results[0]) addStock(results[0]);
+            // A USB / Bluetooth scanner types the code then Enter.
+            const byCode = findByCode(ledger.stock, query) ?? findByCode(ledger.stock, fixAzertyDigits(query));
+            if (byCode) addStock(byCode);
+            else if (shown[0]) addStock(shown[0]);
             else if (query.trim()) addFree(query.trim());
           }}
         />
-        {query.trim() && (
-          <ul className="product-results" role="listbox" aria-label="السلع">
-            {results.map((s) => (
+          <button type="button" className="btn scan-btn" onClick={() => setScanning(true)} aria-label="سكاني الكود بالكاميرا">
+            📷
+          </button>
+        </div>
+        {listOpen && (
+          // Keep the focus in the input while tapping a result.
+          <ul id="sale-results" className="product-results" role="listbox" aria-label="السلع" onPointerDown={(e) => e.preventDefault()}>
+            {cat ? (
+              <li className="pr-head">
+                <strong>
+                  {categoryIcon(cat)} {cat}
+                </strong>
+                <button type="button" className="icon-btn" aria-label="سد" onClick={() => setCat("")}>
+                  ✕
+                </button>
+              </li>
+            ) : (
+              !query.trim() && <li className="pr-hint muted small">{browse.length ? "الأكثر مبيعا · ولا كتب باش تقلب" : "المخزون خاوي · كتب سمية السلعة"}</li>
+            )}
+            {cat && !query.trim() && browse.length === 0 && <li className="pr-hint muted small">ما كاين حتى سلعة فهاد الصنف فالمخزون</li>}
+            {query.trim() && results.length === 0 && <li className="pr-hint muted small">ما كايناش فالمخزون</li>}
+            {shown.map((s) => (
               <li key={s.id}>
                 <button type="button" role="option" aria-selected="false" onClick={() => addStock(s)}>
                   <span className="pr-main">
@@ -344,25 +423,20 @@ export function SaleForm({
                 </button>
               </li>
             ))}
-            <li>
-              <button type="button" className="pr-free" onClick={() => addFree(query.trim())}>
-                ＋ زيد «{query.trim()}» بلا مخزون
-              </button>
-            </li>
+            {(query.trim() || cat) && (
+              <li>
+                <button type="button" className="pr-free" onClick={() => addFree(query.trim(), cat)}>
+                  {query.trim() ? `＋ زيد «${query.trim()}» بلا مخزون` : `＋ حاجة أخرى فـ ${cat} (بلا مخزون)`}
+                </button>
+              </li>
+            )}
           </ul>
         )}
       </div>
 
-      <div className="chips quick-chips" role="group" aria-label="سلع سريعة">
-        {QUICK_ITEMS.map((q) => (
-          <button key={q.item} type="button" className="chip" onClick={() => quick(q)}>
-            ＋ {q.item}
-          </button>
-        ))}
-      </div>
 
       {lines.length === 0 ? (
-        <p className="empty small">قلب على سلعة ولا ضغط على وحدة من الفوق.</p>
+        <p className="empty small">اختار صنف من الفوق ولا قلب على السلعة.</p>
       ) : (
         <ul className="cart">
           {lines.map((l) => {
@@ -446,7 +520,40 @@ export function SaleForm({
           <Field id="sale-advance" label="التسبيق" hint="اللي خلص دابا (كيدخل للصندوق)">
             <input id="sale-advance" inputMode="decimal" dir="ltr" value={advance} onChange={(e) => setAdvance(e.target.value)} />
           </Field>
-          {summary && total > 0 && (
+          {firstInstalment && total > 0 && (
+            <div className="installment-hint first-instalment">
+              <p className="form-section-title">الطريطة</p>
+              <div className="form-grid">
+                <Field id="sale-inst-amount" label="المبلغ" hint={instSuggested ? `اقتراح: ${money(instSuggested)}` : "درهم"}>
+                  <input
+                    id="sale-inst-amount"
+                    inputMode="decimal"
+                    dir="ltr"
+                    placeholder={instSuggested ? String(instSuggested) : ""}
+                    value={inst.amount}
+                    onChange={(e) => setInst((x) => ({ ...x, amount: e.target.value }))}
+                  />
+                </Field>
+                <Field id="sale-inst-period" label="كل">
+                  <select id="sale-inst-period" value={inst.period} onChange={(e) => setInst((x) => ({ ...x, period: e.target.value }))}>
+                    {PERIODS.map((p) => (
+                      <option key={p}>{p}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field id="sale-inst-next" label="الدفعة المقبلة" wide>
+                  <input id="sale-inst-next" type="date" value={instNext} min={data.today} onChange={(e) => setInst((x) => ({ ...x, next: e.target.value, nextTouched: true }))} />
+                </Field>
+              </div>
+              {owedAfter > 0 && (
+                <p className="small">
+                  الكريدي: <strong>{money(owedAfter)}</strong>
+                  {instMonths ? ` · غادي يخلص فـ ${instMonths} شهر تقريبا` : ""}
+                </p>
+              )}
+            </div>
+          )}
+          {summary && !firstInstalment && total > 0 && (
             <div className="installment-hint">
               <p>
                 الكريدي من بعد هاد البيع: <strong>{money(after)}</strong>
@@ -487,10 +594,6 @@ export function SaleForm({
             </label>
           )}
         </div>
-        <label className="seller">
-          <span className="muted small">البائع</span>
-          <input value={seller} placeholder="سميتك" onChange={(e) => setSeller(e.target.value)} />
-        </label>
         {error && (
           <p className="alert error" role="alert">
             {error}
@@ -501,5 +604,16 @@ export function SaleForm({
         </button>
       </div>
     </form>
+    {scanning && (
+      <BarcodeScanner
+        title="📷 سكاني السلعة"
+        onClose={() => setScanning(false)}
+        onResult={(code) => {
+          setScanning(false);
+          scanned(code);
+        }}
+      />
+    )}
+    </>
   );
 }
