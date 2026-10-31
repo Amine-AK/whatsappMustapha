@@ -159,6 +159,12 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
                       {s.clientId ? ` · ${names.get(s.clientId) ?? "زبون مأرشف"}` : ""}
                       {s.seller ? ` · ${s.seller}` : ""}
                       {s.buyPrice !== null ? ` · ربح ${money(s.sellPrice - s.buyPrice)}` : ""}
+                      {s.serials?.length ? (
+                        <>
+                          {" · S/N: "}
+                          <bdi dir="ltr">{s.serials.join(", ")}</bdi>
+                        </>
+                      ) : null}
                     </span>
                     <span className="row-actions">
                       {s.type === "كاش" && (

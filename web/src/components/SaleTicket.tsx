@@ -105,7 +105,14 @@ function Ticket({ lines, paper }: { lines: Sale[]; paper: Paper }) {
               <td className="t-date" dir="ltr">
                 {l.quantity}×
               </td>
-              <td>{l.item}</td>
+              <td>
+                {l.item}
+                {l.serials?.length ? (
+                  <span className="t-sub" dir="ltr">
+                    S/N: {l.serials.join(", ")}
+                  </span>
+                ) : null}
+              </td>
               <td className="t-num">{money(l.sellPrice)}</td>
             </tr>
           ))}

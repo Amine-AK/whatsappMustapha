@@ -34,7 +34,8 @@ export function searchStock(stock: StockItem[], query: string, limit = 8): Stock
   if (!tokens.length) return [];
   const scored: { item: StockItem; score: number }[] = [];
   for (const item of stock) {
-    const own = words(`${item.item} ${item.serial}`);
+    const codes = [item.serial, ...(item.serials ?? [])].join(" ");
+    const own = words(`${item.item} ${codes}`);
     const family = words(item.category);
     let score = 0;
     let ok = true;
@@ -42,7 +43,7 @@ export function searchStock(stock: StockItem[], query: string, limit = 8): Stock
       if (own.some((w) => w === t)) score += 4;
       else if (own.some((w) => w.startsWith(t))) score += 3;
       else if (family.some((w) => w.startsWith(t))) score += 1;
-      else if (t.length >= 3 && normalizeText(`${item.item} ${item.serial}`).includes(t)) score += 1;
+      else if (t.length >= 3 && normalizeText(`${item.item} ${codes}`).includes(t)) score += 1;
       else {
         ok = false;
         break;
@@ -60,14 +61,42 @@ export function searchStock(stock: StockItem[], query: string, limit = 8): Stock
 }
 
 /**
- * The product with exactly this code (barcode, QR or IMEI, kept in the serial
- * column). Several cards may share a barcode: one still in stock comes first.
+ * The product with exactly this code: its barcode (the same on every box) or
+ * the serial number / IMEI of one unit in stock. Several cards may share a
+ * barcode: one still in stock comes first.
  */
 export function findByCode(stock: StockItem[], code: string): StockItem | undefined {
+  return findCode(stock, code)?.item;
+}
+
+/** Same, and tells which unit when the code is a serial number. */
+export function findCode(stock: StockItem[], code: string): { item: StockItem; serial?: string } | undefined {
   const c = code.trim().toLowerCase();
   if (!c) return undefined;
+  for (const item of stock) {
+    const serial = (item.serials ?? []).find((x) => x.trim().toLowerCase() === c);
+    if (serial) return { item, serial };
+  }
   const same = stock.filter((s) => s.serial.trim().toLowerCase() === c);
-  return same.find((s) => s.quantity > 0) ?? same[0];
+  const item = same.find((s) => s.quantity > 0) ?? same[0];
+  return item ? { item } : undefined;
+}
+
+/** The sale of a unit, from its serial number (for the warranty): the latest one. */
+export function findSoldSerial(sales: Sale[], code: string): Sale | undefined {
+  const c = code.trim().toLowerCase();
+  if (!c) return undefined;
+  return [...sales].reverse().find((s) => (s.serials ?? []).some((x) => x.toLowerCase() === c));
+}
+
+/** "356…\n357…, 358…" typed or scanned in a box → the list, without blanks or repeats. */
+export function parseSerials(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.split(/[\n,;\t]+/)) {
+    const x = raw.trim().slice(0, 100);
+    if (x && !out.some((y) => y.toLowerCase() === x.toLowerCase())) out.push(x);
+  }
+  return out;
 }
 
 /** Icon of a product family, for the big buttons of the sale screen. */

@@ -117,6 +117,17 @@ was set up before them):
   cost and profit are shown, and a price under cost is refused. «شراء جديد» in a
   customer's account uses the same form, so every sale is in the reports.
   A cash sale prints a «وصل البيع» ticket.
+- **Serial numbers (S/N / IMEI):** one product can have many units, each with
+  its own S/N (one per line in «الأرقام التسلسلية»; a USB scanner fills the box
+  code after code). The quantity is the number of S/N. Deliveries add S/N and
+  losses tick the ones that went (in «±», logged in حركات المخزون). In a sale,
+  each unit's S/N is chosen (or scanned: the S/N finds its product); it leaves
+  stock, is saved with the sale and printed on the receipt; cancelling puts it
+  back. A S/N can't be in stock twice or sold twice. Scanning a sold S/N in
+  المخزون says when and to whom it was sold (warranty). Columns
+  «الأرقام التسلسلية (S/N)» in المخزون, المبيعات and حركات المخزون (added on their
+  own to existing sheets). The «الباركود» field stays for the code that is the
+  same on every box.
 - **📷 Scanning (QR / barcode):** «📷 سكاني» in المخزون opens the camera. A
   code already in stock asks how many arrived (+1); a new code opens «سلعة
   جديدة» with it filled in. 📷 in the البيع search bar puts the scanned product
