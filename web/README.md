@@ -120,10 +120,11 @@ was set up before them):
 - **📷 Scanning (QR / barcode):** «📷 سكاني» in المخزون opens the camera. A
   code already in stock asks how many arrived (+1); a new code opens «سلعة
   جديدة» with it filled in. 📷 in the البيع search bar puts the scanned product
-  in the sale. The code is kept in the «الباركود / IMEI» column. The camera
-  reader works in Chrome on Android (and Edge / Samsung Internet); elsewhere
-  (iPhone, most PCs) the code can be typed. USB / Bluetooth barcode scanners
-  work everywhere: they type the code and Enter.
+  in the sale. The code is kept in the «الباركود / IMEI» column. Works with
+  the phone camera and with a PC webcam: phones use the browser's built-in
+  reader; PCs and iPhones download a reader (`@zxing/library`, ~450 KB) the
+  first time the scanner opens. The code can also be typed, and USB /
+  Bluetooth barcode scanners work everywhere (they type the code and Enter).
 - **المخزون (stock):** a sale takes the product out of stock; cancelling it
   (in التقارير) puts it back. Quantity changes by hand are differences
   (+3 delivered, −1 lost), so counts from two phones add up, and each one is

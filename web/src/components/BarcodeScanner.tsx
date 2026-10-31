@@ -8,7 +8,7 @@ interface DetectedCode {
   rawValue: string;
 }
 interface Detector {
-  detect(source: CanvasImageSource): Promise<DetectedCode[]>;
+  detect(source: HTMLVideoElement): Promise<DetectedCode[]>;
 }
 interface DetectorClass {
   new (options?: { formats: string[] }): Detector;
@@ -21,19 +21,33 @@ function detectorClass(): DetectorClass | null {
   return typeof window !== "undefined" && "BarcodeDetector" in window ? (window as unknown as { BarcodeDetector: DetectorClass }).BarcodeDetector : null;
 }
 
+/** The browser's reader when there is one (phones), else the bundled one (PCs, iPhone). */
+async function makeDetector(): Promise<Detector> {
+  const Klass = detectorClass();
+  if (Klass) {
+    const supported = (await Klass.getSupportedFormats?.()) ?? WANTED;
+    const formats = WANTED.filter((f) => supported.includes(f));
+    if (formats.length) return new Klass({ formats });
+  }
+  const { createZxingDetector } = await import("@/lib/zxing-detector");
+  return createZxingDetector();
+}
+
+const hasCamera = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+
 /** Codes are kept short and on one line (they go in the barcode / IMEI column). */
 export function cleanCode(raw: string): string {
   return raw.replace(/\s+/g, " ").trim().slice(0, 100);
 }
 
 /**
- * Scan a QR code or a barcode with the camera. Where the browser can't read
- * codes (iPhone, most PCs), the code can be typed or entered with a USB /
- * Bluetooth barcode scanner, which types like a keyboard.
+ * Scan a QR code or a barcode with the phone camera or the PC webcam. The code
+ * can also be typed, or entered with a USB / Bluetooth barcode scanner (it
+ * types like a keyboard).
  */
 export function BarcodeScanner({ title = "📷 سكاني الكود", onResult, onClose }: { title?: string; onResult: (code: string) => void; onClose: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
-  const [status, setStatus] = useState<"starting" | "scanning" | "unsupported" | "denied" | "error">(() => (detectorClass() ? "starting" : "unsupported"));
+  const [status, setStatus] = useState<"starting" | "scanning" | "unsupported" | "denied" | "error">(() => (hasCamera() ? "starting" : "unsupported"));
   const [typed, setTyped] = useState("");
   const done = useRef(false);
   // The latest callback, without restarting the camera when the screen updates.
@@ -43,8 +57,7 @@ export function BarcodeScanner({ title = "📷 سكاني الكود", onResult,
   });
 
   useEffect(() => {
-    const Klass = detectorClass();
-    if (!Klass) return;
+    if (!hasCamera()) return;
     let stream: MediaStream | null = null;
     let timer = 0;
     let stopped = false;
@@ -58,8 +71,7 @@ export function BarcodeScanner({ title = "📷 سكاني الكود", onResult,
 
     (async () => {
       try {
-        const supported = (await Klass.getSupportedFormats?.()) ?? WANTED;
-        const detector = new Klass({ formats: WANTED.filter((f) => supported.includes(f)) });
+        const detector = await makeDetector();
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
         if (stopped) return;
         const v = video.current!;
@@ -76,7 +88,7 @@ export function BarcodeScanner({ title = "📷 سكاني الكود", onResult,
           } catch {
             // A frame that can't be read: try the next one.
           }
-          timer = window.setTimeout(tick, 200);
+          timer = window.setTimeout(tick, 150);
         };
         void tick();
       } catch (e) {
@@ -107,12 +119,12 @@ export function BarcodeScanner({ title = "📷 سكاني الكود", onResult,
         <div className="scanner">
           <video ref={video} className="scanner-video" muted playsInline autoPlay aria-label="الكاميرا" />
           <div className="scanner-frame" aria-hidden="true" />
-          <p className="scanner-help">{status === "starting" ? "كنحلو الكاميرا…" : "وجه الكاميرا للكود (QR ولا باركود)"}</p>
+          <p className="scanner-help">{status === "starting" ? "كنحلو الكاميرا…" : "قرب الكود للكاميرا (QR ولا باركود)"}</p>
         </div>
       )}
-      {status === "unsupported" && <p className="alert info">هاد المتصفح ما كيقراش الكود بالكاميرا (كيخدم فـ Chrome على Android). كتب الكود ولا استعمل سكانير USB.</p>}
+      {status === "unsupported" && <p className="alert info">ما لقيناش كاميرا فهاد الجهاز. كتب الكود ولا استعمل سكانير USB.</p>}
       {status === "denied" && <p className="alert warn">ما عطيتيش الإذن للكاميرا. سمح بيها من إعدادات المتصفح، ولا كتب الكود هنا.</p>}
-      {status === "error" && <p className="alert warn">ما قدرناش نحلو الكاميرا. كتب الكود هنا ولا استعمل سكانير USB.</p>}
+      {status === "error" && <p className="alert warn">ما قدرناش نحلو الكاميرا (يمكن ما كايناش ولا مستعملة فشي برنامج آخر). كتب الكود هنا ولا استعمل سكانير USB.</p>}
       <form className="scanner-type" onSubmit={submit}>
         <label htmlFor="scan-code" className="small muted">
           {camera ? "ولا كتب الكود:" : "الكود:"}
