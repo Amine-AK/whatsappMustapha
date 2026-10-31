@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { money } from "@/lib/format";
 import { CONDITIONS, newLedgerId, nowParts, type Condition, type StockItem } from "@/lib/ledger";
 import { displayDate } from "@/lib/receipt";
 import { currentSeller, findByCode, normalizeText, round2, searchStock } from "@/lib/shop";
+import { fixAzertyDigits } from "@/lib/scanner-input";
 import { BarcodeScanner } from "./BarcodeScanner";
+import { useScannerInput } from "./useScannerInput";
 import { Modal } from "./Modal";
 import type { LedgerState } from "./useLedger";
 import { Confirm, Field, parseAmount } from "./ui";
@@ -28,6 +30,16 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const [onlyLow, setOnlyLow] = useState(false);
   const [sub, setSub] = useState<Sub>(null);
 
+  const viewRef = useRef<HTMLDivElement>(null);
+
+  /** Scanned (camera or USB scanner): more of a known product, or a new card with the code. */
+  function scanned(code: string) {
+    const found = findByCode(ledger.stock, code);
+    setQuery("");
+    setSub(found ? { kind: "adjust", item: found, scanned: true } : { kind: "add", code });
+  }
+  useScannerInput(scanned, viewRef);
+
   const list = useMemo(() => {
     let items = query.trim() ? searchStock(ledger.stock, query, 500) : [...ledger.stock].sort((a, b) => a.item.localeCompare(b.item, "ar"));
     if (category) items = items.filter((s) => s.category === category);
@@ -40,7 +52,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const units = ledger.stock.reduce((t, s) => t + Math.max(0, s.quantity), 0);
 
   return (
-    <div className="view">
+    <div className="view" ref={viewRef}>
       <section className="summary" aria-label="ملخص المخزون">
         <div className="stat">
           <span className="stat-label">السلع</span>
@@ -72,7 +84,23 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         <label className="visually-hidden" htmlFor="stock-search">
           قلب فالمخزون
         </label>
-        <input id="stock-search" type="search" className="search" placeholder="قلب بالسمية، الفئة ولا IMEI…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input
+          id="stock-search"
+          type="search"
+          className="search"
+          placeholder="قلب بالسمية، الفئة ولا الكود…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            // A code scanned into the search field: same as scanning with the camera.
+            const code = fixAzertyDigits(query);
+            if (findByCode(ledger.stock, code) || (/^[\w-]{6,}$/.test(code) && !list.length)) {
+              e.preventDefault();
+              scanned(code);
+            }
+          }}
+        />
         <button type="button" className={`btn ${onlyLow ? "selected" : ""}`} aria-pressed={onlyLow} onClick={() => setOnlyLow((x) => !x)}>
           ⚠️ قليلة
         </button>
@@ -135,11 +163,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         <BarcodeScanner
           title="📷 سكاني السلعة"
           onClose={() => setSub(null)}
-          onResult={(code) => {
-            // Known product: more of it arrived. Unknown: a new card with the code filled in.
-            const found = findByCode(ledger.stock, code);
-            setSub(found ? { kind: "adjust", item: found, scanned: true } : { kind: "add", code });
-          }}
+          onResult={scanned}
         />
       )}
       {sub?.kind === "delete" && (
@@ -221,7 +245,7 @@ function StockForm({
     const ops: Parameters<LedgerState["run"]>[1][] = [];
     if (isNewCategory) ops.push({ type: "category.save", category: { name: categoryName, description: "", marginTarget: 0 } });
     const at = new Date().toISOString();
-    const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: v.serial.trim(), notes: v.notes.trim() };
+    const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: fixAzertyDigits(v.serial), notes: v.notes.trim() };
     if (item) {
       ops.push({ type: "stock.update", id: item.id, base: item.updatedAt, patch: fields });
       data.run(`تعديل سلعة · ${fields.item}`, ...ops);

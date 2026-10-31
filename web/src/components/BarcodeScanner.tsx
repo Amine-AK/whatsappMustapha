@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { fixAzertyDigits } from "@/lib/scanner-input";
 import { Modal } from "./Modal";
 
 // The browser's own barcode reader (Chrome on Android, Samsung Internet, Edge…).
@@ -37,7 +38,7 @@ const hasCamera = () => typeof navigator !== "undefined" && !!navigator.mediaDev
 
 /** Codes are kept short and on one line (they go in the barcode / IMEI column). */
 export function cleanCode(raw: string): string {
-  return raw.replace(/\s+/g, " ").trim().slice(0, 100);
+  return fixAzertyDigits(raw.replace(/\s+/g, " ")).slice(0, 100);
 }
 
 /**

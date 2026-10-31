@@ -123,8 +123,14 @@ was set up before them):
   in the sale. The code is kept in the «الباركود / IMEI» column. Works with
   the phone camera and with a PC webcam: phones use the browser's built-in
   reader; PCs and iPhones download a reader (`@zxing/library`, ~450 KB) the
-  first time the scanner opens. The code can also be typed, and USB /
-  Bluetooth barcode scanners work everywhere (they type the code and Enter).
+  first time the scanner opens. The code can also be typed.
+- **USB / Bluetooth barcode scanner:** no need to click anything first. In
+  البيع a scan puts the product in the sale (scan twice = quantity 2); in
+  المخزون it asks «شحال وصلات منها؟» for a known product or opens «سلعة جديدة»
+  with the code. Works on AZERTY (French) PCs too: the app reads the physical
+  keys, and repairs codes scanned into a field («é&ç…» → «219…»). A scan is
+  ignored while a window (receipt, form) is open, and its Enter never presses
+  a button. Scanners must end each code with Enter (the factory default).
 - **المخزون (stock):** a sale takes the product out of stock; cancelling it
   (in التقارير) puts it back. Quantity changes by hand are differences
   (+3 delivered, −1 lost), so counts from two phones add up, and each one is

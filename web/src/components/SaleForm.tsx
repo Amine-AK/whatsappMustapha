@@ -14,7 +14,9 @@ import {
 } from "@/lib/ledger";
 import { formatMoroccoPhone, isManualPeriod, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
 import { categoryIcon, currentSeller, findByCode, marginCheck, round2, searchStock } from "@/lib/shop";
+import { fixAzertyDigits } from "@/lib/scanner-input";
 import { BarcodeScanner } from "./BarcodeScanner";
+import { useScannerInput } from "./useScannerInput";
 import type { LedgerState } from "./useLedger";
 import { ClientPicker, Field, parseAmount } from "./ui";
 
@@ -80,6 +82,7 @@ export function SaleForm({
   const [inst, setInst] = useState({ amount: "", period: "شهر", next: "", nextTouched: false });
   const [open, setOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const results = useMemo(
@@ -128,6 +131,15 @@ export function SaleForm({
     setOpen(false);
     setCat("");
   }
+
+  /** A code from the camera or a USB scanner: the product goes in the sale. */
+  function scanned(code: string) {
+    const found = findByCode(ledger.stock, code);
+    if (found) return addStock(found);
+    setQuery(code);
+    setError(`ما لقيناش الكود «${code}» فالمخزون. اختار السلعة ولا زيدها فالمخزون.`);
+  }
+  useScannerInput(scanned, formRef);
 
   function addFree(item: string, category = "", price = 0) {
     setLines((ls) => [...ls, { key: `L${++lineSeq}`, stockId: "", item, category, qty: 1, unitBuy: null, unitList: price, price: price ? String(price) : "", inStock: null }]);
@@ -278,7 +290,7 @@ export function SaleForm({
 
   return (
     <>
-    <form className="sale-form" onSubmit={submit} noValidate>
+    <form ref={formRef} className="sale-form" onSubmit={submit} noValidate>
       {!lockedClientId && (
         <div className="segmented wide-seg sale-type" role="group" aria-label="نوع البيع">
           {(["كاش", "كريدي"] as SaleType[]).map((t) => (
@@ -366,7 +378,7 @@ export function SaleForm({
             if (e.key !== "Enter") return;
             e.preventDefault();
             // A USB / Bluetooth scanner types the code then Enter.
-            const byCode = findByCode(ledger.stock, query);
+            const byCode = findByCode(ledger.stock, query) ?? findByCode(ledger.stock, fixAzertyDigits(query));
             if (byCode) addStock(byCode);
             else if (shown[0]) addStock(shown[0]);
             else if (query.trim()) addFree(query.trim());
@@ -598,10 +610,7 @@ export function SaleForm({
         onClose={() => setScanning(false)}
         onResult={(code) => {
           setScanning(false);
-          const found = findByCode(ledger.stock, code);
-          if (found) return addStock(found);
-          setQuery(code);
-          setError(`ما لقيناش الكود «${code}» فالمخزون. اختار السلعة ولا زيدها فالمخزون.`);
+          scanned(code);
         }}
       />
     )}
