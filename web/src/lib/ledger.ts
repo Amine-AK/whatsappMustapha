@@ -67,28 +67,140 @@ export interface InstallmentChange {
   createdAt: string;
 }
 
+// ---------------------------------------------------------------- shop: stock, sales, cash drawer
+
+export const CONDITIONS = ["جديد", "مستعمل"] as const;
+export type Condition = (typeof CONDITIONS)[number];
+
+/** A product in stock (المخزون). */
+export interface StockItem {
+  id: string;
+  item: string;
+  category: string;
+  condition: Condition;
+  /** Cost of one unit. */
+  buyPrice: number;
+  /** Suggested selling price of one unit. */
+  sellPrice: number;
+  /** Can go below 0 when sold before being counted in: shown as a warning. */
+  quantity: number;
+  /** IMEI / serial, optional. */
+  serial: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Product family (الفئات), used to group sales in the reports. */
+export interface Category {
+  name: string;
+  description: string;
+  /** Target margin in %, 0 = none. */
+  marginTarget: number;
+}
+
+export const SALE_TYPES = ["كاش", "كريدي"] as const;
+export type SaleType = (typeof SALE_TYPES)[number];
+
+/** One line of a sale (المبيعات): every sale, cash or credit, is logged here. */
+export interface Sale {
+  id: string;
+  /** Lines sold together share the ticket (the id of the first line). */
+  ticket: string;
+  date: string;
+  time: string;
+  item: string;
+  category: string;
+  /** Product taken from stock, "" = typed by hand. */
+  stockId: string;
+  quantity: number;
+  /** Total cost of the line, null = unknown (typed by hand without a cost). */
+  buyPrice: number | null;
+  /** Total suggested price, before any discount. */
+  listPrice: number;
+  /** Total price paid by the customer. */
+  sellPrice: number;
+  type: SaleType;
+  /** Credit only. */
+  clientId: string;
+  /** Credit only: the purchase on the customer's account. */
+  purchaseId: string;
+  seller: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Stock counted in or out by hand (حركات المخزون); sales move stock on their own. */
+export interface StockMove {
+  id: string;
+  stockId: string;
+  date: string;
+  delta: number;
+  reason: string;
+  seller: string;
+  createdAt: string;
+}
+
+/** End of day count of the cash drawer (الصندوق اليومي). */
+export interface CaisseClose {
+  id: string;
+  date: string;
+  time: string;
+  clerk: string;
+  cashSales: number;
+  advances: number;
+  installments: number;
+  expenses: number;
+  expensesNote: string;
+  /** What should be in the drawer. */
+  expected: number;
+  /** What was counted, null = not counted. */
+  counted: number | null;
+  notes: string;
+  createdAt: string;
+}
+
 export interface Ledger {
   clients: Client[];
   purchases: Purchase[];
   payments: Payment[];
   changes: InstallmentChange[];
+  stock: StockItem[];
+  categories: Category[];
+  sales: Sale[];
+  moves: StockMove[];
+  closings: CaisseClose[];
 }
 
-export const EMPTY_LEDGER: Ledger = { clients: [], purchases: [], payments: [], changes: [] };
+export function emptyLedger(): Ledger {
+  return { clients: [], purchases: [], payments: [], changes: [], stock: [], categories: [], sales: [], moves: [], closings: [] };
+}
+
+export const EMPTY_LEDGER: Ledger = emptyLedger();
+
+/** A ledger saved by an older version of the app (before the shop tabs) gets the missing lists. */
+export function normalizeLedger(l: Partial<Ledger> | null | undefined): Ledger {
+  return { ...emptyLedger(), ...(l ?? {}) } as Ledger;
+}
 
 // ---------------------------------------------------------------- ids
 
 const ID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O, 1/I: easy to read on a receipt
 
-/** "C-7K2QXM9A": prefix C (client), S (purchase), P (payment), T (instalment change), O (operation). */
-export function newLedgerId(prefix: "C" | "S" | "P" | "T" | "O"): string {
+/**
+ * "C-7K2QXM9A": prefix C (client), S (purchase), P (payment), T (instalment change), O (operation),
+ * I (stock item), V (sale), M (stock move), K (cash drawer closing).
+ */
+export type IdPrefix = "C" | "S" | "P" | "T" | "O" | "I" | "V" | "M" | "K";
+export function newLedgerId(prefix: IdPrefix): string {
   const bytes = new Uint8Array(8);
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) crypto.getRandomValues(bytes);
   else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
   return `${prefix}-${Array.from(bytes, (b) => ID_CHARS[b % ID_CHARS.length]).join("")}`;
 }
 
-const ID_RE = /^[CSPTO]-[A-Z0-9]{4,16}$/;
+const ID_RE = /^[CSPTOIVMK]-[A-Z0-9]{4,16}$/;
 export const isLedgerId = (s: unknown): s is string => typeof s === "string" && ID_RE.test(s);
 
 // ---------------------------------------------------------------- operations
@@ -108,7 +220,22 @@ type OpBody =
       base: string;
       patch: Partial<Pick<Payment, "clientId" | "purchaseId" | "date" | "time" | "amount" | "kind" | "notes">>;
     }
-  | { type: "payment.delete"; id: string };
+  | { type: "payment.delete"; id: string }
+  | { type: "stock.add"; item: StockItem }
+  | {
+      type: "stock.update";
+      id: string;
+      base: string;
+      patch: Partial<Pick<StockItem, "item" | "category" | "condition" | "buyPrice" | "sellPrice" | "serial" | "notes">>;
+    }
+  | { type: "stock.adjust"; move: StockMove }
+  | { type: "stock.delete"; id: string }
+  | { type: "category.save"; category: Category }
+  /** Lines sold together; a credit sale also brings the purchases for the customer's account. */
+  | { type: "sale.add"; lines: Sale[]; purchases: Purchase[] }
+  /** Cancel one line: the product goes back to stock, its purchase leaves the customer's account. */
+  | { type: "sale.delete"; id: string }
+  | { type: "caisse.close"; close: CaisseClose };
 
 export type LedgerOp = OpBody & {
   /** Unique id of this change. */
@@ -161,6 +288,30 @@ function checkPayment(p: Payment): string | null {
   if (!date(p.date) || !p.date || !time(p.time) || !text(p.createdAt, 40)) return "التاريخ غير صحيح";
   if (!PAYMENT_KINDS.includes(p.kind)) return "نوع الدفعة غير صحيح";
   if (!text(p.notes, 1000)) return "الملاحظة طويلة بزاف";
+  return null;
+}
+
+const amount = (v: unknown) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 100_000_000;
+
+function checkStock(s: StockItem): string | null {
+  if (!isLedgerId(s.id) || !s.id.startsWith("I-")) return "رقم السلعة غير صحيح";
+  if (!text(s.item, 300) || !s.item.trim()) return "اسم السلعة ضروري";
+  if (!text(s.category, 100) || !text(s.serial, 100) || !text(s.notes, 1000)) return "معلومات السلعة غير صحيحة";
+  if (!CONDITIONS.includes(s.condition)) return "الحالة غير صحيحة";
+  if (!money(s.buyPrice) || !money(s.sellPrice)) return "الثمن غير صحيح";
+  if (!amount(s.quantity) || !Number.isInteger(s.quantity)) return "الكمية غير صحيحة";
+  return null;
+}
+
+function checkSale(s: Sale): string | null {
+  if (!isLedgerId(s.id) || !s.id.startsWith("V-") || !isLedgerId(s.ticket)) return "رقم البيع غير صحيح";
+  if (!text(s.item, 300) || !s.item.trim() || !text(s.category, 100)) return "السلعة ضرورية";
+  if (!SALE_TYPES.includes(s.type)) return "نوع البيع غير صحيح";
+  if (!Number.isInteger(s.quantity) || s.quantity < 1 || s.quantity > 10_000) return "الكمية غير صحيحة";
+  if (!money(s.sellPrice) || !money(s.listPrice) || (s.buyPrice !== null && !money(s.buyPrice))) return "الثمن غير صحيح";
+  if (!date(s.date) || !s.date || !time(s.time) || !text(s.createdAt, 40)) return "التاريخ غير صحيح";
+  if (!text(s.seller, 100) || !text(s.notes, 1000)) return "معلومات البيع غير صحيحة";
+  if (s.stockId && !isLedgerId(s.stockId)) return "السلعة غير صحيحة";
   return null;
 }
 
@@ -247,14 +398,21 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       const next = { ...p, ...pick<Purchase>(op.patch, ["date", "item", "price", "notes"]), updatedAt: op.at };
       const err = checkPurchase(next);
       if (err) return invalid(ledger, err);
-      return { ledger: { ...ledger, purchases: replace(ledger.purchases, p.id, next) }, result: "ok" };
+      // The sale behind this purchase follows the new price, date and name.
+      const sales = ledger.sales.map((s) =>
+        s.purchaseId === p.id ? { ...s, item: next.item, date: next.date, sellPrice: next.price, updatedAt: op.at } : s,
+      );
+      return { ledger: { ...ledger, purchases: replace(ledger.purchases, p.id, next), sales }, result: "ok" };
     }
     case "purchase.delete": {
       if (!ledger.purchases.some((p) => p.id === op.id)) return { ledger, result: "already" };
+      // The sale behind it is cancelled too, and its product goes back to stock.
+      const cancelled = ledger.sales.filter((s) => s.purchaseId === op.id);
       return {
         ledger: {
-          ...ledger,
+          ...restock(ledger, cancelled, op.at),
           purchases: ledger.purchases.filter((p) => p.id !== op.id),
+          sales: ledger.sales.filter((s) => s.purchaseId !== op.id),
           // Payments for that item stay, as general payments.
           payments: ledger.payments.map((p) => (p.purchaseId === op.id ? { ...p, purchaseId: "" } : p)),
         },
@@ -288,7 +446,124 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       if (!ledger.payments.some((p) => p.id === op.id)) return { ledger, result: "already" };
       return { ledger: { ...ledger, payments: ledger.payments.filter((p) => p.id !== op.id) }, result: "ok" };
     }
+    case "stock.add": {
+      if (!op.item || typeof op.item !== "object") return invalid(ledger, "السلعة غير صحيحة");
+      if (ledger.stock.some((s) => s.id === op.item.id)) return { ledger, result: "already" };
+      const err = checkStock(op.item);
+      if (err) return invalid(ledger, err);
+      return { ledger: { ...ledger, stock: [...ledger.stock, { ...op.item, updatedAt: op.at }] }, result: "ok" };
+    }
+    case "stock.update": {
+      const s = ledger.stock.find((x) => x.id === op.id);
+      if (!s) return invalid(ledger, "هاد السلعة ما بقاتش فالمخزون");
+      if (s.updatedAt === op.at) return { ledger, result: "already" };
+      if (s.updatedAt !== op.base) return { ledger, result: "conflict", message: CONFLICT };
+      const next = { ...s, ...pick<StockItem>(op.patch, ["item", "category", "condition", "buyPrice", "sellPrice", "serial", "notes"]), updatedAt: op.at };
+      const err = checkStock(next);
+      if (err) return invalid(ledger, err);
+      return { ledger: { ...ledger, stock: replace(ledger.stock, s.id, next) }, result: "ok" };
+    }
+    case "stock.adjust": {
+      const m = op.move;
+      if (!m || typeof m !== "object") return invalid(ledger, "الكمية غير صحيحة");
+      if (ledger.moves.some((x) => x.id === m.id)) return { ledger, result: "already" };
+      const s = ledger.stock.find((x) => x.id === m.stockId);
+      if (!s) return invalid(ledger, "هاد السلعة ما بقاتش فالمخزون");
+      if (!isLedgerId(m.id) || !m.id.startsWith("M-") || !Number.isInteger(m.delta) || !m.delta || !amount(m.delta)) return invalid(ledger, "الكمية غير صحيحة");
+      if (!date(m.date) || !text(m.reason, 300) || !text(m.seller, 100)) return invalid(ledger, "معلومات غير صحيحة");
+      // A difference, not a new total: counts from two phones add up instead of overwriting each other.
+      const next = { ...s, quantity: s.quantity + m.delta, updatedAt: op.at };
+      return { ledger: { ...ledger, stock: replace(ledger.stock, s.id, next), moves: [...ledger.moves, m] }, result: "ok" };
+    }
+    case "stock.delete": {
+      if (!ledger.stock.some((s) => s.id === op.id)) return { ledger, result: "already" };
+      return { ledger: { ...ledger, stock: ledger.stock.filter((s) => s.id !== op.id) }, result: "ok" };
+    }
+    case "category.save": {
+      const c = op.category;
+      if (!c || !text(c.name, 100) || !c.name.trim() || !text(c.description, 300) || !money(c.marginTarget) || c.marginTarget > 1000) {
+        return invalid(ledger, "الفئة غير صحيحة");
+      }
+      const clean = { name: c.name.trim(), description: c.description.trim(), marginTarget: c.marginTarget };
+      const old = ledger.categories.find((x) => x.name === clean.name);
+      if (old && old.description === clean.description && old.marginTarget === clean.marginTarget) return { ledger, result: "already" };
+      const categories = old ? ledger.categories.map((x) => (x.name === clean.name ? clean : x)) : [...ledger.categories, clean];
+      return { ledger: { ...ledger, categories }, result: "ok" };
+    }
+    case "sale.add": {
+      const lines = Array.isArray(op.lines) ? op.lines : [];
+      const purchases = Array.isArray(op.purchases) ? op.purchases : [];
+      if (!lines.length || lines.length > 50) return invalid(ledger, "البيع خاوي");
+      if (lines.every((l) => ledger.sales.some((s) => s.id === l.id))) return { ledger, result: "already" };
+      if (lines.some((l) => !l || typeof l !== "object") || purchases.some((p) => !p || typeof p !== "object")) return invalid(ledger, "البيع غير صحيح");
+      for (const l of lines) {
+        const err = checkSale(l);
+        if (err) return invalid(ledger, err);
+        if (ledger.sales.some((s) => s.id === l.id)) return invalid(ledger, "رقم البيع مكرر");
+        if (l.ticket !== lines[0].ticket) return invalid(ledger, "رقم التيكي غير صحيح");
+      }
+      if (lines[0].type === "كريدي") {
+        const c = findClient(lines[0].clientId);
+        if (!c) return invalid(ledger, "الزبون ما بقاش");
+        if (purchases.length !== lines.length) return invalid(ledger, "البيع بالكريدي خاصو السلع");
+        for (const [i, l] of lines.entries()) {
+          const p = purchases[i];
+          if (l.type !== "كريدي" || l.clientId !== c.id || l.purchaseId !== p.id || p.clientId !== c.id) return invalid(ledger, "البيع بالكريدي غير صحيح");
+          if (p.price !== l.sellPrice || ledger.purchases.some((x) => x.id === p.id)) return invalid(ledger, "البيع بالكريدي غير صحيح");
+          const err = checkPurchase(p);
+          if (err) return invalid(ledger, err);
+        }
+      } else if (purchases.length || lines.some((l) => l.type !== "كاش" || l.clientId || l.purchaseId)) {
+        return invalid(ledger, "البيع كاش ما فيهش زبون");
+      }
+      // Products from stock go out (unknown ones are simply not tracked).
+      const out = new Map<string, number>();
+      for (const l of lines) if (l.stockId && ledger.stock.some((s) => s.id === l.stockId)) out.set(l.stockId, (out.get(l.stockId) ?? 0) + l.quantity);
+      const stock = ledger.stock.map((s) => (out.has(s.id) ? { ...s, quantity: s.quantity - out.get(s.id)!, updatedAt: op.at } : s));
+      return {
+        ledger: {
+          ...ledger,
+          stock,
+          sales: [...ledger.sales, ...lines.map((l) => ({ ...l, stockId: out.has(l.stockId) ? l.stockId : "", updatedAt: op.at }))],
+          purchases: [...ledger.purchases, ...purchases.map((p) => ({ ...p, updatedAt: op.at }))],
+        },
+        result: "ok",
+      };
+    }
+    case "sale.delete": {
+      const s = ledger.sales.find((x) => x.id === op.id);
+      if (!s) return { ledger, result: "already" };
+      const after = restock(ledger, [s], op.at);
+      return {
+        ledger: {
+          ...after,
+          sales: ledger.sales.filter((x) => x.id !== s.id),
+          purchases: s.purchaseId ? ledger.purchases.filter((p) => p.id !== s.purchaseId) : ledger.purchases,
+          payments: s.purchaseId ? ledger.payments.map((p) => (p.purchaseId === s.purchaseId ? { ...p, purchaseId: "" } : p)) : ledger.payments,
+        },
+        result: "ok",
+      };
+    }
+    case "caisse.close": {
+      const k = op.close;
+      if (!k || typeof k !== "object") return invalid(ledger, "معلومات الصندوق غير صحيحة");
+      if (ledger.closings.some((x) => x.id === k.id)) return { ledger, result: "already" };
+      if (!isLedgerId(k.id) || !k.id.startsWith("K-") || !date(k.date) || !k.date || !time(k.time)) return invalid(ledger, "معلومات الصندوق غير صحيحة");
+      if (!text(k.clerk, 100) || !text(k.expensesNote, 500) || !text(k.notes, 1000)) return invalid(ledger, "معلومات الصندوق غير صحيحة");
+      if (![k.cashSales, k.advances, k.installments, k.expected].every(amount) || !money(k.expenses) || (k.counted !== null && !money(k.counted))) {
+        return invalid(ledger, "المبالغ غير صحيحة");
+      }
+      return { ledger: { ...ledger, closings: [...ledger.closings, k] }, result: "ok" };
+    }
   }
+}
+
+/** Cancelled sales give their products back to stock. */
+function restock(ledger: Ledger, sales: Sale[], at: string): Ledger {
+  const back = new Map<string, number>();
+  for (const s of sales) if (s.stockId) back.set(s.stockId, (back.get(s.stockId) ?? 0) + s.quantity);
+  if (!back.size) return ledger;
+  return { ...ledger, stock: ledger.stock.map((x) => (back.has(x.id) ? { ...x, quantity: x.quantity + back.get(x.id)!, updatedAt: at } : x)) };
 }
 
 /** A payment can only point to a purchase of the same customer. */

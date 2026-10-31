@@ -5,8 +5,8 @@ import { ApiError, apiFetch } from "@/lib/client";
 import { idbGet, idbSet } from "@/lib/idb";
 import {
   applyOps,
-  EMPTY_LEDGER,
   newLedgerId,
+  normalizeLedger,
   summarize,
   type ClientSummary,
   type Ledger,
@@ -103,7 +103,7 @@ export function useLedger(): LedgerState {
       return;
     }
     setNeedsSetup(false);
-    saveSnapshot({ ledger: data.ledger ?? EMPTY_LEDGER, fetchedAt: new Date().toISOString() });
+    saveSnapshot({ ledger: normalizeLedger(data.ledger), fetchedAt: new Date().toISOString() });
     setLoadError("");
   }, [saveSnapshot]);
 
@@ -157,8 +157,10 @@ export function useLedger(): LedgerState {
       const [snap, saved] = await Promise.all([idbGet<Snapshot>(SNAPSHOT_KEY), idbGet<Queued[]>(QUEUE_KEY)]);
       if (cancelled) return;
       if (snap) {
-        snapRef.current = snap;
-        setSnapshot(snap);
+        // Saved by an older version of the app: add the lists it didn't have.
+        const fixed = { ...snap, ledger: normalizeLedger(snap.ledger) };
+        snapRef.current = fixed;
+        setSnapshot(fixed);
       }
       queueRef.current = saved ?? [];
       setQueue(queueRef.current);
@@ -232,7 +234,13 @@ export function useLedger(): LedgerState {
           const op = { ...q.op } as LedgerOp;
           // Re-base an edit on what the sheet holds now (the user chose to apply it anyway).
           if (current && "base" in op) {
-            const list = op.type.startsWith("client") ? current.clients : op.type.startsWith("purchase") ? current.purchases : current.payments;
+            const list = op.type.startsWith("client")
+              ? current.clients
+              : op.type.startsWith("purchase")
+                ? current.purchases
+                : op.type.startsWith("stock")
+                  ? current.stock
+                  : current.payments;
             const rec = list.find((r) => r.id === op.id);
             if (rec) op.base = rec.updatedAt;
           }

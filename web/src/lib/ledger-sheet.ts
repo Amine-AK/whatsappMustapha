@@ -2,14 +2,20 @@
 // the old single "Feuille 1" layout (code.gs, 17 columns).
 
 import {
+  emptyLedger,
   newLedgerId,
   summarizeClient,
+  type CaisseClose,
+  type Category,
   type Client,
   type InstallmentChange,
   type Ledger,
   type Payment,
   type PaymentKind,
   type Purchase,
+  type Sale,
+  type StockItem,
+  type StockMove,
 } from "./ledger";
 import { COL, extractNumbers, parseSheetDate, parseSum, stripStamps, todayISO } from "./sheet-logic";
 
@@ -18,7 +24,23 @@ export const TABS = {
   purchases: "المشتريات",
   payments: "الدفعات",
   changes: "تغييرات الطريطة",
+  stock: "المخزون",
+  categories: "الفئات",
+  sales: "المبيعات",
+  moves: "حركات المخزون",
+  closings: "الصندوق اليومي",
 } as const;
+
+/** Tabs added with the shop features: created on their own in sheets set up before them. */
+export const SHOP_KEYS = ["stock", "categories", "sales", "moves", "closings"] as const;
+
+export const DEFAULT_CATEGORIES: Category[] = [
+  { name: "كهرومنزلي كبير", description: "ثلاجات، غسالات، كليماتيزورات، فرنات…", marginTarget: 15 },
+  { name: "هواتف وأجهزة", description: "هواتف جديدة ومستعملة، طابليط…", marginTarget: 10 },
+  { name: "إكسسوارات وكابلات", description: "شواحن، كابلات، تيليكوموند، كاسك…", marginTarget: 50 },
+  { name: "ريباراسيون", description: "إصلاح وصيانة، تبديل الشاشة، تركيب…", marginTarget: 60 },
+  { name: "أواني منزلية", description: "أجهزة وأواني الكوزينة…", marginTarget: 25 },
+];
 
 export const ARCHIVE_TABS = {
   clients: "أرشيف الزبناء",
@@ -38,6 +60,18 @@ export const HEADERS: Record<TableKey, string[]> = {
     "رقم الوصل", "رقم الزبون", "الزبون", "التاريخ", "الساعة", "المبلغ", "النوع", "رقم السلعة", "السلعة", "ملاحظات", "تاريخ الإضافة", "آخر تعديل",
   ],
   changes: ["رقم", "رقم الزبون", "الزبون", "التاريخ", "الطريطة القديمة", "الطريطة الجديدة", "المدة القديمة", "المدة الجديدة", "السبب", "تاريخ الإضافة"],
+  stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "السيريال / IMEI", "ملاحظات", "تاريخ الإضافة", "آخر تعديل"],
+  categories: ["الفئة", "الوصف", "هامش الربح المستهدف %"],
+  sales: [
+    "رقم البيع", "رقم التيكي", "التاريخ", "الساعة", "السلعة", "الفئة", "رقم السلعة فالمخزون", "الكمية",
+    "ثمن الشراء", "الثمن المقترح", "ثمن البيع", "الربح", "النوع", "رقم الزبون", "الزبون", "رقم العملية",
+    "البائع", "ملاحظات", "تاريخ الإضافة", "آخر تعديل",
+  ],
+  moves: ["رقم", "رقم السلعة", "السلعة", "التاريخ", "التغيير", "السبب", "البائع", "تاريخ الإضافة"],
+  closings: [
+    "رقم", "التاريخ", "الساعة", "البائع", "مبيعات الكاش", "تسبيقات الكريدي", "دفعات الطريطات", "المصاريف",
+    "تفاصيل المصاريف", "الصافي فالقجر (المتوقع)", "المبلغ المحسوب", "الفرق", "ملاحظات", "تاريخ الإضافة",
+  ],
 };
 
 export type Cell = string | number;
@@ -113,13 +147,98 @@ export function rowToChange(r: unknown[]): InstallmentChange | null {
   };
 }
 
-export function rowsToLedger(tables: Record<TableKey, unknown[][]>): Ledger {
-  const keep = <T>(x: T | null): x is T => x !== null;
+/** Whole number that can be negative (parseSum drops the sign). */
+const int = (v: unknown) => Math.trunc(typeof v === "number" ? v : Number(s(v).replace(",", ".")) || 0);
+/** Empty cell = unknown (null), anything else a number. */
+const nn = (v: unknown) => (s(v) === "" ? null : n(v));
+
+export function rowToStock(r: unknown[]): StockItem | null {
+  const id = s(r[0]);
+  if (!id) return null;
   return {
-    clients: tables.clients.map(rowToClient).filter(keep),
-    purchases: tables.purchases.map(rowToPurchase).filter(keep),
-    payments: tables.payments.map(rowToPayment).filter(keep),
-    changes: tables.changes.map(rowToChange).filter(keep),
+    id,
+    item: s(r[1]),
+    category: s(r[2]),
+    condition: s(r[3]) === "مستعمل" ? "مستعمل" : "جديد",
+    buyPrice: n(r[4]),
+    sellPrice: n(r[5]),
+    quantity: int(r[6]),
+    serial: s(r[7]),
+    notes: s(r[8]),
+    createdAt: s(r[9]),
+    updatedAt: s(r[10]),
+  };
+}
+
+export function rowToCategory(r: unknown[]): Category | null {
+  const name = s(r[0]);
+  return name ? { name, description: s(r[1]), marginTarget: n(r[2]) } : null;
+}
+
+export function rowToSale(r: unknown[]): Sale | null {
+  const id = s(r[0]);
+  if (!id) return null;
+  return {
+    id,
+    ticket: s(r[1]) || id,
+    date: d(r[2]),
+    time: t(r[3]),
+    item: s(r[4]),
+    category: s(r[5]),
+    stockId: s(r[6]),
+    quantity: Math.max(1, Math.trunc(n(r[7])) || 1),
+    buyPrice: nn(r[8]),
+    listPrice: n(r[9]),
+    sellPrice: n(r[10]),
+    type: s(r[12]) === "كريدي" ? "كريدي" : "كاش",
+    clientId: s(r[13]),
+    purchaseId: s(r[15]),
+    seller: s(r[16]),
+    notes: s(r[17]),
+    createdAt: s(r[18]),
+    updatedAt: s(r[19]),
+  };
+}
+
+export function rowToMove(r: unknown[]): StockMove | null {
+  const id = s(r[0]);
+  if (!id) return null;
+  return { id, stockId: s(r[1]), date: d(r[3]), delta: int(r[4]), reason: s(r[5]), seller: s(r[6]), createdAt: s(r[7]) };
+}
+
+export function rowToClosing(r: unknown[]): CaisseClose | null {
+  const id = s(r[0]);
+  if (!id) return null;
+  return {
+    id,
+    date: d(r[1]),
+    time: t(r[2]),
+    clerk: s(r[3]),
+    cashSales: n(r[4]),
+    advances: n(r[5]),
+    installments: n(r[6]),
+    expenses: n(r[7]),
+    expensesNote: s(r[8]),
+    expected: n(r[9]),
+    counted: nn(r[10]),
+    notes: s(r[12]),
+    createdAt: s(r[13]),
+  };
+}
+
+export function rowsToLedger(tables: Partial<Record<TableKey, unknown[][]>>): Ledger {
+  const keep = <T>(x: T | null): x is T => x !== null;
+  const rows = (k: TableKey) => tables[k] ?? [];
+  return {
+    clients: rows("clients").map(rowToClient).filter(keep),
+    purchases: rows("purchases").map(rowToPurchase).filter(keep),
+    payments: rows("payments").map(rowToPayment).filter(keep),
+    changes: rows("changes").map(rowToChange).filter(keep),
+    stock: rows("stock").map(rowToStock).filter(keep),
+    categories: rows("categories").map(rowToCategory).filter(keep),
+    sales: rows("sales").map(rowToSale).filter(keep),
+    moves: rows("moves").map(rowToMove).filter(keep),
+    closings: rows("closings").map(rowToClosing).filter(keep),
   };
 }
 
@@ -160,8 +279,40 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
       [c.id, c.clientId, names.get(c.clientId) ?? "", c.date, money(c.oldAmount), money(c.newAmount), c.oldPeriod, c.newPeriod, c.reason, c.createdAt],
     ]),
   );
-  return { clients, purchases, payments, changes };
+  const stockNames = new Map(ledger.stock.map((x) => [x.id, x.item]));
+  const stock = new Map<string, Cell[]>(
+    ledger.stock.map((x) => [
+      x.id,
+      [x.id, x.item, x.category, x.condition, x.buyPrice, x.sellPrice, x.quantity, x.serial, x.notes, x.createdAt, x.updatedAt],
+    ]),
+  );
+  const categories = new Map<string, Cell[]>(ledger.categories.map((c) => [c.name, [c.name, c.description, money(c.marginTarget)]]));
+  const sales = new Map<string, Cell[]>(
+    ledger.sales.map((x) => [
+      x.id,
+      [
+        x.id, x.ticket, x.date, x.time, x.item, x.category, x.stockId, x.quantity,
+        x.buyPrice ?? "", x.listPrice, x.sellPrice, x.buyPrice === null ? "" : round2(x.sellPrice - x.buyPrice), x.type,
+        x.clientId, x.clientId ? (names.get(x.clientId) ?? "") : "", x.purchaseId, x.seller, x.notes, x.createdAt, x.updatedAt,
+      ],
+    ]),
+  );
+  const moves = new Map<string, Cell[]>(
+    ledger.moves.map((m) => [m.id, [m.id, m.stockId, stockNames.get(m.stockId) ?? "", m.date, m.delta, m.reason, m.seller, m.createdAt]]),
+  );
+  const closings = new Map<string, Cell[]>(
+    ledger.closings.map((k) => [
+      k.id,
+      [
+        k.id, k.date, k.time, k.clerk, k.cashSales, k.advances, k.installments, k.expenses, k.expensesNote, k.expected,
+        k.counted ?? "", k.counted === null ? "" : round2(k.counted - k.expected), k.notes, k.createdAt,
+      ],
+    ]),
+  );
+  return { clients, purchases, payments, changes, stock, categories, sales, moves, closings };
 }
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Same content? Numbers and their text form count as equal ("500" = 500). */
 export function sameRow(a: unknown[], b: Cell[]): boolean {
@@ -200,7 +351,7 @@ function parts(text: string): string[] {
  * joined with "+", with "(dd/MM/yyyy - HH:mm)" stamps) into the new ledger.
  */
 export function migrateOldRows(rows: unknown[][], now = new Date()): Ledger {
-  const ledger: Ledger = { clients: [], purchases: [], payments: [], changes: [] };
+  const ledger: Ledger = emptyLedger();
   const createdAt = now.toISOString();
   const today = todayISO(now);
   for (const raw of rows) {
