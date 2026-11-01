@@ -1,4 +1,5 @@
 import { handleError, jsonError, readJson } from "@/lib/api";
+import { requireUser } from "@/lib/access";
 import { watiConfigured } from "@/lib/env";
 import { summarize } from "@/lib/ledger";
 import { logTimestamp, reminderBlocker, reminderParams, sentToday } from "@/lib/reminders";
@@ -15,6 +16,8 @@ type Result = { id: string; status: "sent" | "failed" | "skipped"; detail: strin
 
 /** Sends up to 10 reminders; the app calls it in batches and shows progress. */
 export async function POST(request: Request) {
+  const me = await requireUser("reminders");
+  if (me instanceof Response) return me;
   if (!watiConfigured()) return jsonError("WATI ماشي مضبوط. زيد WATI_API_ENDPOINT و WATI_ACCESS_TOKEN و WATI_TEMPLATE_NAME و WATI_CHANNEL_NUMBER.", 503);
   const body = await readJson<{ ids?: string[] }>(request);
   if (body instanceof Response) return body;

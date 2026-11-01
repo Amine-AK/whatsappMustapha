@@ -6,6 +6,7 @@ import { monthsToFinish, newLedgerId, nowParts, type Client, type ClientSummary 
 import { formatMoroccoPhone, isValidPhone, PERIODS } from "@/lib/sheet-logic";
 import { Modal } from "./Modal";
 import { SaleForm } from "./SaleForm";
+import { can } from "@/lib/roles";
 import type { LedgerState } from "./useLedger";
 import { ChangeList, diff, Field, parseAmount } from "./ui";
 
@@ -70,6 +71,8 @@ export function NewClientForm({
     const c: Client = { id: newLedgerId("C"), name: v.name.trim(), phone: v.phone.trim(), installment: 0, period: "شهر", nextDueDate: "", notes: "", createdAt: at, updatedAt: at };
     data.run(`زبون جديد · ${c.name}`, { type: "client.add", client: c });
     setClient(c);
+    // Only someone who may sell on credit is offered the sale.
+    if (!can(data.me, "sell_credit")) return onDone(c.id);
     setStep("ask");
   }
 

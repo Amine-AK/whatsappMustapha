@@ -308,6 +308,36 @@ What makes syncing safe:
 - The changes waiting on a device live in that browser's storage. Clearing the
   browser data, or uninstalling the app, before they're synced loses them.
 
+## Employee accounts and permissions
+
+- **Owner (المالك):** logs in with the name `owner` and `APP_PASSWORD` (sessions
+  from before accounts count as the owner's). Sees and does everything, and
+  manages accounts in ⚙️ → «👥 المستخدمين والصلاحيات». Other owner accounts can
+  be created there too.
+- **Seller (البائع):** sees every customer and their debt; everything else is
+  ticked by the owner: cash sale, credit sale, payments, add customer, edit
+  (customers, purchases, payments), delete/archive customers, cancel sales,
+  reminders, stock management, cash drawer, reports, Excel backup. Discounts are
+  free.
+- **Stock manager (مسؤول المخزون):** only المخزون: add products, add deliveries
+  (+), scan and search. No customers, sales, quantities out, edits or deletions.
+- **Buy prices and profit:** visible to an employee only if the owner ticks
+  «يشوف ثمن الشراء والربح». Otherwise the server never sends them (an employee
+  can still enter the cost of a new product). «مجموع الكريدي» and «قيمة المخزون»
+  are for the owner only.
+- Accounts live in the sheet tab «المستخدمين»: name, login, role, services, cost
+  visibility, active, and the password **hashed** (scrypt, at least 8
+  characters). This tab is never in the Excel backup.
+- **The server enforces it:** each route checks the permission, each change
+  synced from a phone is refused if not allowed, and the server writes who made
+  each sale, stock change and drawer closing (and fills in the cost of a sale
+  made by an employee who can't see it). Disabling an account or changing its
+  password signs it out at once; 5 wrong passwords in 10 minutes block the
+  login for a while.
+- On a shared phone or PC: logging out waits for unsent changes, then removes
+  that user's copy of the data; when another person logs in, the previous
+  person's offline data is cleared.
+
 ## DEV ONLY: «مسح جميع المعلومات» (empty the sheet while testing)
 
 With `ALLOW_DATA_RESET=true` in Vercel (then Redeploy), the ⚙️ menu shows

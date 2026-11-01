@@ -11,6 +11,7 @@ import { PaymentForm, PurchaseForm } from "./MoneyForms";
 import { SaleForm } from "./SaleForm";
 import { ReceiptDialog } from "./ReceiptDialog";
 import type { LedgerState } from "./useLedger";
+import { can } from "@/lib/roles";
 import { Confirm } from "./ui";
 
 type Sub =
@@ -28,6 +29,7 @@ type Sub =
 
 export function ClientDetail({ data, clientId, onClose, onToast }: { data: LedgerState; clientId: string; onClose: () => void; onToast: (t: string) => void }) {
   const [sub, setSub] = useState<Sub>(null);
+  const allow = (p: Parameters<typeof can>[1]) => can(data.me, p);
   const [busy, setBusy] = useState(false);
   const s = data.summaries.find((x) => x.client.id === clientId);
   if (!s) {
@@ -68,9 +70,11 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
               {c.phone}
             </a>
           )}
+          {allow("client_delete") && (
           <button type="button" className="delete-mini" onClick={() => setSub({ kind: "delete-client" })} disabled={busy} aria-label={`حذف ${c.name}`} title="حذف الزبون">
             🗑️ حذف
           </button>
+          )}
         </div>
         {c.notes && <p className="muted">{c.notes}</p>}
 
@@ -100,25 +104,33 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
                 الدفعة المقبلة: {c.nextDueDate ? `${displayDate(c.nextDueDate)} · ${dueText(c.nextDueDate, s.status, data.today)}` : "—"}
               </p>
             </div>
+            {allow("client_edit") && (
             <button type="button" className="btn small-btn" onClick={() => setSub({ kind: "installment" })}>
               بدل الطريطة
             </button>
+            )}
           </div>
         )}
 
         <div className="detail-actions">
+          {allow("payment") && (
           <button type="button" className="btn primary" onClick={() => setSub({ kind: "payment" })} disabled={!s.purchases.length}>
             دفعة
           </button>
+          )}
+          {allow("sell_credit") && (
           <button type="button" className="btn" onClick={() => setSub({ kind: "sale" })}>
             شراء جديد
           </button>
+          )}
           <button type="button" className="btn" onClick={() => setSub({ kind: "receipt", mode: "statement" })}>
             كشف الحساب
           </button>
+          {allow("client_edit") && (
           <button type="button" className="btn" onClick={() => setSub({ kind: "info" })}>
             تعديل المعلومات
           </button>
+          )}
         </div>
 
         <section className="detail-section" aria-label="المشتريات">
@@ -135,12 +147,16 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
                 </div>
                 <span className={`row-amount ${it.remaining > 0 ? "" : "ok-text"}`}>{it.remaining > 0 ? `باقي ${money(it.remaining)}` : "خالصة ✓"}</span>
                 <div className="row-actions">
+                  {allow("client_edit") && (
                   <button type="button" className="link-btn" onClick={() => setSub({ kind: "purchase", purchase: it.purchase })}>
                     تعديل
                   </button>
+                  )}
+                  {allow("client_edit") && (
                   <button type="button" className="link-btn danger-text" onClick={() => setSub({ kind: "delete-purchase", purchase: it.purchase })}>
                     حذف
                   </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -165,12 +181,16 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
                   <button type="button" className="link-btn" onClick={() => setSub({ kind: "receipt", mode: "payment", paymentId: p.id })}>
                     وصل
                   </button>
+                  {allow("client_edit") && (
                   <button type="button" className="link-btn" onClick={() => setSub({ kind: "payment", payment: p })}>
                     تعديل / نقل
                   </button>
+                  )}
+                  {allow("client_edit") && (
                   <button type="button" className="link-btn danger-text" onClick={() => setSub({ kind: "delete-payment", payment: p })}>
                     حذف
                   </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -201,7 +221,7 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
         )}
 
         <div className="detail-footer">
-          {s.remaining <= 0 && s.purchases.length > 0 && (
+          {s.remaining <= 0 && s.purchases.length > 0 && allow("client_delete") && (
             <button type="button" className="btn" disabled={!data.online || data.pendingCount > 0 || busy} onClick={() => setSub({ kind: "archive" })}>
               أرشفة
             </button>

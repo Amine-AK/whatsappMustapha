@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/client";
+import { idbClearLedger } from "@/lib/idb";
+import { can, ROLE_LABEL, type Me } from "@/lib/roles";
 import { backupDue } from "@/lib/backup";
 import { dueText, matchesClient, money, STATUS_LABEL } from "@/lib/format";
 import { unpaidItems, type ClientSummary } from "@/lib/ledger";
@@ -9,6 +11,7 @@ import { displayDate, installmentText } from "@/lib/receipt";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { ArchiveView } from "./ArchiveView";
 import { BackupDialog } from "./BackupDialog";
+import { UsersDialog } from "./UsersDialog";
 import { DevResetDialog } from "./DevReset"; // DEV ONLY
 import { CaisseView } from "./CaisseView";
 import { ReportsView } from "./ReportsView";
@@ -64,6 +67,7 @@ type Dialog =
   | { kind: "backup"; reminder?: boolean }
   | { kind: "sale-ticket"; ticket: string }
   | { kind: "dev-reset" } // DEV ONLY
+  | { kind: "users" }
   | null;
 
 type View = "credit" | "sell" | "stock" | "caisse" | "reports";
@@ -76,6 +80,20 @@ const VIEWS: { value: View; icon: string; label: string }[] = [
   { value: "reports", icon: "📊", label: "التقارير" },
 ];
 const VIEW_KEY = "view";
+
+/** The sections this user can open. */
+function viewsFor(me: Me | null): typeof VIEWS {
+  if (!me) return VIEWS.filter((v) => v.value === "credit");
+  if (me.role === "stock") return VIEWS.filter((v) => v.value === "stock");
+  return VIEWS.filter(
+    (v) =>
+      v.value === "credit" ||
+      (v.value === "sell" && (can(me, "sell_cash") || can(me, "sell_credit"))) ||
+      (v.value === "stock" && can(me, "stock")) ||
+      (v.value === "caisse" && can(me, "caisse")) ||
+      (v.value === "reports" && can(me, "reports")),
+  );
+}
 
 const MAX_CARDS = 200;
 
@@ -94,6 +112,12 @@ export function Dashboard() {
       if (saved && VIEWS.some((v) => v.value === saved)) setViewState(saved);
     } catch {}
   }, []);
+
+  const me = data.me;
+  const allow = (p: Parameters<typeof can>[1]) => can(me, p);
+  const views = viewsFor(me);
+  // A section this user can't open (e.g. remembered from another account) falls back to the first allowed one.
+  const current: View = views.some((v) => v.value === view) ? view : views[0].value;
 
   function setView(v: View) {
     setViewState(v);
@@ -155,7 +179,7 @@ export function Dashboard() {
   useEffect(() => {
     if (!ready || dialog) return;
     const check = () => {
-      if (backupDue()) setDialog({ kind: "backup", reminder: true });
+      if (can(data.me, "backup") && backupDue()) setDialog({ kind: "backup", reminder: true });
     };
     check();
     const timer = setInterval(check, 10 * 60 * 1000);
@@ -220,47 +244,60 @@ export function Dashboard() {
             onDevReset={() => setDialog({ kind: "dev-reset" })}
             onToast={setToast}
             onSendBackup={() => setDialog({ kind: "backup" })}
+            me={me}
+            canBackup={allow("backup")}
+            onUsers={allow("owner_only") ? () => setDialog({ kind: "users" }) : undefined}
             onLogout={async () => {
-              if (data.pendingCount > 0 && !window.confirm("مازال كاين تعديلات ما تزامنوش. غادي يبقاو فالتيليفون ويتزامنو ملي تدخل من جديد. نخرج؟")) return;
+              // Changes not sent yet belong to this user: they must reach the sheet before someone else logs in.
+              if (data.pendingCount > 0) {
+                window.alert(`تسنى حتى يتزامنو ${data.pendingCount} تعديل قبل ما تخرج.`);
+                return;
+              }
               await apiFetch("/api/logout", { method: "POST" }).catch(() => {});
+              await idbClearLedger();
               window.location.href = "/login";
             }}
           />
         </div>
       </header>
 
+      {/* One section only (the stock manager): no need for the bar. */}
+      {views.length > 1 && (
       <nav className="views" aria-label="الأقسام">
-        {VIEWS.map((v) => (
-          <button key={v.value} type="button" className={view === v.value ? "on" : ""} aria-current={view === v.value ? "page" : undefined} onClick={() => setView(v.value)}>
+        {views.map((v) => (
+          <button key={v.value} type="button" className={current === v.value ? "on" : ""} aria-current={current === v.value ? "page" : undefined} onClick={() => setView(v.value)}>
             <span aria-hidden="true">{v.icon}</span>
             <span>{v.label}</span>
           </button>
         ))}
       </nav>
+      )}
 
       <main className="content">
         <SyncBar state={data} />
 
-        {view !== "credit" && !data.ledger && !data.loadError && <p className="muted center">كنجيبو المعلومات من الـ Google Sheet…</p>}
-        {view !== "credit" && data.loadError && !data.ledger && <p className="alert error">{data.loadError}</p>}
-        {view === "sell" && data.ledger && (
+        {current !== "credit" && !data.ledger && !data.loadError && <p className="muted center">كنجيبو المعلومات من الـ Google Sheet…</p>}
+        {current !== "credit" && data.loadError && !data.ledger && <p className="alert error">{data.loadError}</p>}
+        {current === "sell" && data.ledger && (
           <section className="sell-view" aria-label="البيع">
             <SaleForm data={data} onDone={saleDone} />
           </section>
         )}
-        {view === "stock" && data.ledger && <StockView data={data} onToast={setToast} />}
-        {view === "caisse" && data.ledger && <CaisseView data={data} onToast={setToast} />}
-        {view === "reports" && data.ledger && <ReportsView data={data} onToast={setToast} />}
+        {current === "stock" && data.ledger && <StockView data={data} onToast={setToast} />}
+        {current === "caisse" && data.ledger && <CaisseView data={data} onToast={setToast} />}
+        {current === "reports" && data.ledger && <ReportsView data={data} onToast={setToast} />}
 
-        {view === "credit" && (
+        {current === "credit" && (
         <>
 
         <section className="summary" aria-label="ملخص">
-          <div className="stat">
-            <span className="stat-label">مجموع الكريدي</span>
-            <span className="stat-value">{money(summary.totalDebt)}</span>
-            <span className="stat-sub">{summary.owing} زبون</span>
-          </div>
+          {me?.role === "owner" && (
+            <div className="stat">
+              <span className="stat-label">مجموع الكريدي</span>
+              <span className="stat-value">{money(summary.totalDebt)}</span>
+              <span className="stat-sub">{summary.owing} زبون</span>
+            </div>
+          )}
           <div className="stat alert-stat">
             <span className="stat-label">متأخرين</span>
             <span className="stat-value">{summary.overdue}</span>
@@ -275,9 +312,12 @@ export function Dashboard() {
 
         {/* On a phone this row sits fixed at the bottom of the screen, under the thumb. */}
         <div className="actions-row">
-          <button type="button" className="btn primary" onClick={() => setDialog({ kind: "add" })}>
-            + زبون جديد
-          </button>
+          {allow("client_add") && (
+            <button type="button" className="btn primary" onClick={() => setDialog({ kind: "add" })}>
+              + زبون جديد
+            </button>
+          )}
+          {allow("reminders") && (
           <button
             type="button"
             className="btn whatsapp"
@@ -288,13 +328,14 @@ export function Dashboard() {
             تذكير المتأخرين
             {summary.overdue > 0 && <span className="badge">{summary.overdue}</span>}
           </button>
+          )}
         </div>
-        {reminderBlocked && (
+        {reminderBlocked && allow("reminders") && (
           <p id="remind-why" className="muted small">
             {reminderBlocked}
           </p>
         )}
-        {summary.archivable.length > 0 && (
+        {summary.archivable.length > 0 && allow("client_delete") && (
           <div className="archive-banner">
             <p>
               <strong>{summary.archivable.length}</strong> زبون خلصو كلشي من أكثر من 3 شهور.
@@ -420,7 +461,7 @@ export function Dashboard() {
                         s={s}
                         today={today}
                         onOpen={() => setDialog({ kind: "client", id: s.client.id })}
-                        onPay={() => setDialog({ kind: "pay", id: s.client.id })}
+                        onPay={allow("payment") ? () => setDialog({ kind: "pay", id: s.client.id }) : undefined}
                       />
                     ))}
                   </ul>
@@ -459,6 +500,7 @@ export function Dashboard() {
       {dialog?.kind === "sale-ticket" && data.ledger && (
         <SaleTicketDialog lines={data.ledger.sales.filter((x) => x.ticket === dialog.ticket)} notice="تسجل البيع ✓" onClose={() => setDialog(null)} />
       )}
+      {dialog?.kind === "users" && <UsersDialog onClose={() => setDialog(null)} onToast={setToast} />}
       {/* DEV ONLY */}
       {dialog?.kind === "dev-reset" && <DevResetDialog data={data} onClose={() => setDialog(null)} onToast={setToast} />}
       {dialog?.kind === "backup" && (
@@ -489,7 +531,7 @@ export function Dashboard() {
   );
 }
 
-function ClientCard({ s, today, onOpen, onPay }: { s: ClientSummary; today: string; onOpen: () => void; onPay: () => void }) {
+function ClientCard({ s, today, onOpen, onPay }: { s: ClientSummary; today: string; onOpen: () => void; onPay?: () => void }) {
   const c = s.client;
   const unpaid = unpaidItems(s);
   return (
@@ -524,9 +566,11 @@ function ClientCard({ s, today, onOpen, onPay }: { s: ClientSummary; today: stri
         {s.remaining > 0 && installmentText(s) && <p className="muted small">الطريطة: {installmentText(s)}</p>}
       </button>
       <div className="card-actions two">
+        {onPay && (
         <button type="button" className="btn primary" onClick={onPay} disabled={!s.purchases.length}>
           دفعة
         </button>
+        )}
         <button type="button" className="btn" onClick={onOpen}>
           الحساب
         </button>

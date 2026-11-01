@@ -13,6 +13,7 @@ import {
   type LedgerOp,
   type OpResult,
 } from "@/lib/ledger";
+import type { Me } from "@/lib/roles";
 import { todayISO } from "@/lib/sheet-logic";
 
 const SNAPSHOT_KEY = "ledger-snapshot";
@@ -32,11 +33,15 @@ export interface Queued {
 interface Snapshot {
   ledger: Ledger;
   fetchedAt: string;
+  /** Who it was loaded for (the app works offline, so it must remember). */
+  me?: Me;
 }
 
 type OpInput = LedgerOp extends infer T ? (T extends LedgerOp ? Omit<T, "opId" | "at"> : never) : never;
 
 export interface LedgerState {
+  /** The logged-in user (null until known). */
+  me: Me | null;
   /** Ledger with the unsent changes already applied. */
   ledger: Ledger | null;
   summaries: ClientSummary[];
@@ -82,6 +87,7 @@ export function useLedger(): LedgerState {
   const [loadError, setLoadError] = useState("");
   const [syncError, setSyncError] = useState("");
   const [devReset, setDevReset] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
   const [today, setToday] = useState(() => todayISO());
 
   const snapRef = useRef<Snapshot | null>(null);
@@ -101,15 +107,16 @@ export function useLedger(): LedgerState {
   }, []);
 
   const pull = useCallback(async () => {
-    const data = await apiFetch<{ ledger?: Ledger; today: string; needsSetup?: boolean; devReset?: boolean }>("/api/data");
+    const data = await apiFetch<{ ledger?: Ledger; today: string; needsSetup?: boolean; devReset?: boolean; me?: Me }>("/api/data");
     setDevReset(Boolean(data.devReset));
+    if (data.me) setMe(data.me);
     setToday(data.today);
     if (data.needsSetup) {
       setNeedsSetup(true);
       return;
     }
     setNeedsSetup(false);
-    saveSnapshot({ ledger: normalizeLedger(data.ledger), fetchedAt: new Date().toISOString() });
+    saveSnapshot({ ledger: normalizeLedger(data.ledger), fetchedAt: new Date().toISOString(), me: data.me });
     setLoadError("");
   }, [saveSnapshot]);
 
@@ -167,6 +174,7 @@ export function useLedger(): LedgerState {
         const fixed = { ...snap, ledger: normalizeLedger(snap.ledger) };
         snapRef.current = fixed;
         setSnapshot(fixed);
+        if (snap.me) setMe(snap.me);
       }
       queueRef.current = saved ?? [];
       setQueue(queueRef.current);
@@ -213,6 +221,7 @@ export function useLedger(): LedgerState {
   const summaries = useMemo(() => (ledger ? summarize(ledger, today) : []), [ledger, today]);
 
   return {
+    me,
     ledger,
     summaries,
     today,

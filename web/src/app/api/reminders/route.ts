@@ -1,4 +1,5 @@
 import { handleError } from "@/lib/api";
+import { requireUser } from "@/lib/access";
 import { watiConfigured } from "@/lib/env";
 import { summarize } from "@/lib/ledger";
 import { reminderRow } from "@/lib/reminders";
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 
 /** Customers whose payment date has passed and who still owe money. */
 export async function GET() {
+  const me = await requireUser("reminders");
+  if (me instanceof Response) return me;
   try {
     const today = todayISO();
     const [ledger, log] = await Promise.all([loadLedger(), readReminderLog()]);

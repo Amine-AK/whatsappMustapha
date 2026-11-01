@@ -1,8 +1,9 @@
 import "server-only";
+import { ConfigError } from "./config-error";
 
 function required(name: string): string {
   const v = process.env[name];
-  if (!v) throw new Error(`Missing environment variable ${name} (see .env.example)`);
+  if (!v) throw new ConfigError(name, `Missing environment variable ${name} (see .env.example)`);
   return v;
 }
 
@@ -10,7 +11,7 @@ export const env = {
   appPassword: () => required("APP_PASSWORD"),
   sessionSecret: () => {
     const v = required("SESSION_SECRET");
-    if (v.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters");
+    if (v.length < 32) throw new ConfigError("SESSION_SECRET", "SESSION_SECRET must be at least 32 characters");
     return v;
   },
 

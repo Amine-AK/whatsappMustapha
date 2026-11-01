@@ -92,12 +92,20 @@ export interface SyncResult {
   message?: string;
 }
 
-/** Apply a batch of changes from a device, in order, and save them. */
-export async function sync(ops: LedgerOp[]): Promise<SyncResult[]> {
+/**
+ * Apply a batch of changes from a device, in order, and save them. `guard`
+ * refuses a change (a message) or returns it as it should be saved.
+ */
+export async function sync(ops: LedgerOp[], guard?: (op: LedgerOp, ledger: Ledger) => LedgerOp | string): Promise<SyncResult[]> {
   const before = await loadLedger();
   let ledger = before;
   const results: SyncResult[] = [];
-  for (const op of ops) {
+  for (const raw of ops) {
+    const op = guard ? guard(raw, ledger) : raw;
+    if (typeof op === "string") {
+      results.push({ opId: raw.opId, result: "invalid", message: op });
+      continue;
+    }
     const r = applyOp(ledger, op);
     ledger = r.ledger;
     results.push({ opId: op.opId, result: r.result, message: r.message });
