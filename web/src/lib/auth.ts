@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { ConfigError } from "./config-error";
 
 // Signed session cookie: who is logged in (uid) and a fingerprint of their
 // password (pv: changing the password signs out old sessions). It expires after
@@ -9,7 +10,7 @@ export const SESSION_DAYS = 30;
 
 function secret(): string {
   const v = process.env.SESSION_SECRET ?? "";
-  if (v.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters");
+  if (v.length < 32) throw new ConfigError("SESSION_SECRET", "SESSION_SECRET must be at least 32 characters");
   return v;
 }
 
@@ -54,7 +55,7 @@ export function verifySessionToken(token: string | undefined, now = Date.now()):
 
 export function checkPassword(input: string): boolean {
   const expected = process.env.APP_PASSWORD ?? "";
-  if (!expected) throw new Error("Missing environment variable APP_PASSWORD");
+  if (!expected) throw new ConfigError("APP_PASSWORD", "Missing environment variable APP_PASSWORD");
   // Compare hashes so the comparison time doesn't depend on the length.
   const h = (s: string) => createHmac("sha256", "pw").update(s).digest("hex");
   return safeEqual(h(input), h(expected));
