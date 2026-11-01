@@ -188,6 +188,12 @@ export async function deleteRows(deletes: { title: string; rows: number[] }[]): 
   if (requests.length) await api(":batchUpdate", { method: "POST", body: { requests } });
 }
 
+/** Empty every row under the title row of these tabs (the titles stay). */
+export async function clearRows(titles: string[]): Promise<void> {
+  if (!titles.length) return;
+  await api("/values:batchClear", { method: "POST", body: { ranges: titles.map((t) => a1(t, "A2:ZZ")) } });
+}
+
 /** Add rows at the end of a tab. */
 export async function appendRows(title: string, rows: Cell[][]): Promise<void> {
   if (!rows.length) return;

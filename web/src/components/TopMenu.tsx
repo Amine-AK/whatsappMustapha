@@ -12,13 +12,16 @@ const THEMES: { value: Theme; icon: string; label: string }[] = [
 
 interface Props {
   online: boolean;
+  /** DEV ONLY: show «مسح جميع المعلومات». */
+  devReset?: boolean;
+  onDevReset?: () => void;
   onSendBackup: () => void;
   onLogout: () => void;
   onToast: (msg: string) => void;
 }
 
 /** ⚙️ in the header: Excel backup, theme and logout. */
-export function TopMenu({ online, onSendBackup, onLogout, onToast }: Props) {
+export function TopMenu({ online, devReset, onDevReset, onSendBackup, onLogout, onToast }: Props) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
   const [downloading, setDownloading] = useState(false);
@@ -97,6 +100,24 @@ export function TopMenu({ online, onSendBackup, onLogout, onToast }: Props) {
               </button>
             ))}
           </div>
+          {devReset && onDevReset && (
+            <>
+              <hr />
+              {/* DEV ONLY: remove before going live. */}
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item danger-text"
+                disabled={!online}
+                onClick={() => {
+                  setOpen(false);
+                  onDevReset();
+                }}
+              >
+                🧪 مسح جميع المعلومات (تطوير)
+              </button>
+            </>
+          )}
           <hr />
           <button type="button" role="menuitem" className="menu-item" onClick={onLogout} disabled={!online}>
             🚪 خروج

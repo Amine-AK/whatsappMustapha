@@ -308,6 +308,21 @@ What makes syncing safe:
 - The changes waiting on a device live in that browser's storage. Clearing the
   browser data, or uninstalling the app, before they're synced loses them.
 
+## DEV ONLY: «مسح جميع المعلومات» (empty the sheet while testing)
+
+With `ALLOW_DATA_RESET=true` in Vercel (then Redeploy), the ⚙️ menu shows
+«🧪 مسح جميع المعلومات (تطوير)». It downloads an Excel backup (ticked by
+default), asks to type «مسح», then empties every app tab of the Google Sheet
+(titles stay, the default families come back, `Feuille 1` is not touched) and
+forgets this device's unsent changes. Without the variable the button is hidden
+and `/api/dev/reset` answers 403. Other phones should reload the app after a
+reset, or their unsent changes could come back.
+
+**Before going live:** delete `ALLOW_DATA_RESET` in Vercel. To remove the code:
+`src/lib/dev-reset.ts`, `src/app/api/dev/`, `src/components/DevReset.tsx`, and
+the lines marked `DEV ONLY` (env.ts, api/data, useLedger.ts, TopMenu.tsx,
+Dashboard.tsx).
+
 ## Security
 
 - One shop password (`APP_PASSWORD`). After 30 days you need to log in again.

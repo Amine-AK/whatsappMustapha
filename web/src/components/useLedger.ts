@@ -55,6 +55,10 @@ export interface LedgerState {
   /** Send a refused change again; an edit is re-based on the sheet's current version. */
   retry: (opId: string) => void;
   discard: (opId: string) => void;
+  /** DEV ONLY: the server allows «مسح جميع المعلومات». */
+  devReset: boolean;
+  /** DEV ONLY: forget this device's unsent changes and reload from the (emptied) sheet. */
+  clearDevice: () => Promise<void>;
 }
 
 function isTemporary(e: unknown): boolean {
@@ -77,6 +81,7 @@ export function useLedger(): LedgerState {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [syncError, setSyncError] = useState("");
+  const [devReset, setDevReset] = useState(false);
   const [today, setToday] = useState(() => todayISO());
 
   const snapRef = useRef<Snapshot | null>(null);
@@ -96,7 +101,8 @@ export function useLedger(): LedgerState {
   }, []);
 
   const pull = useCallback(async () => {
-    const data = await apiFetch<{ ledger?: Ledger; today: string; needsSetup?: boolean }>("/api/data");
+    const data = await apiFetch<{ ledger?: Ledger; today: string; needsSetup?: boolean; devReset?: boolean }>("/api/data");
+    setDevReset(Boolean(data.devReset));
     setToday(data.today);
     if (data.needsSetup) {
       setNeedsSetup(true);
@@ -250,5 +256,10 @@ export function useLedger(): LedgerState {
       void sync();
     },
     discard: (opId) => saveQueue(queueRef.current.filter((q) => q.op.opId !== opId)),
+    devReset,
+    clearDevice: async () => {
+      saveQueue([]);
+      await pull();
+    },
   };
 }
