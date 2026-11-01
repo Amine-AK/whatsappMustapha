@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { agoText, downloadFile, fetchBackup, lastBackupAt, markBackupDone } from "@/lib/backup";
+import { ROLE_LABEL, type Me } from "@/lib/roles";
 import { applyTheme, readTheme, type Theme } from "@/lib/theme";
 
 const THEMES: { value: Theme; icon: string; label: string }[] = [
@@ -12,6 +13,10 @@ const THEMES: { value: Theme; icon: string; label: string }[] = [
 
 interface Props {
   online: boolean;
+  me: Me | null;
+  canBackup: boolean;
+  /** Owner only: manage employee accounts. */
+  onUsers?: () => void;
   /** DEV ONLY: show «مسح جميع المعلومات». */
   devReset?: boolean;
   onDevReset?: () => void;
@@ -21,7 +26,7 @@ interface Props {
 }
 
 /** ⚙️ in the header: Excel backup, theme and logout. */
-export function TopMenu({ online, devReset, onDevReset, onSendBackup, onLogout, onToast }: Props) {
+export function TopMenu({ online, me, canBackup, onUsers, devReset, onDevReset, onSendBackup, onLogout, onToast }: Props) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>("system");
   const [downloading, setDownloading] = useState(false);
@@ -66,23 +71,51 @@ export function TopMenu({ online, devReset, onDevReset, onSendBackup, onLogout, 
       </button>
       {open && (
         <div className="menu" role="menu" aria-label="القائمة">
+          {me && (
+            <>
+              <p className="menu-user">
+                👤 <strong>{me.name}</strong> <span className="muted small">· {ROLE_LABEL[me.role]}</span>
+              </p>
+              <hr />
+            </>
+          )}
+          {onUsers && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item"
+                onClick={() => {
+                  setOpen(false);
+                  onUsers();
+                }}
+              >
+                👥 المستخدمين والصلاحيات
+              </button>
+              <hr />
+            </>
+          )}
+          {canBackup && (
+            <>
           <p className="menu-label">النسخة الاحتياطية · آخر وحدة {agoText(lastBackupAt())}</p>
-          <button type="button" role="menuitem" className="menu-item" onClick={() => void download()} disabled={!online || downloading}>
-            {downloading ? "⏳ كنوجدو الملف…" : "⬇️ تحميل Excel"}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="menu-item"
-            disabled={!online}
-            onClick={() => {
-              setOpen(false);
-              onSendBackup();
-            }}
-          >
-            📤 صيفط Excel فواتساب
-          </button>
-          <hr />
+            <button type="button" role="menuitem" className="menu-item" onClick={() => void download()} disabled={!online || downloading}>
+              {downloading ? "⏳ كنوجدو الملف…" : "⬇️ تحميل Excel"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              disabled={!online}
+              onClick={() => {
+                setOpen(false);
+                onSendBackup();
+              }}
+            >
+              📤 صيفط Excel فواتساب
+            </button>
+            <hr />
+            </>
+          )}
           <p className="menu-label">المظهر</p>
           <div className="segmented menu-theme" role="group" aria-label="المظهر">
             {THEMES.map((t) => (

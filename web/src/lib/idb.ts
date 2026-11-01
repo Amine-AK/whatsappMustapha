@@ -45,3 +45,12 @@ export async function idbSet(key: string, value: unknown): Promise<void> {
     tx.onerror = () => resolve();
   });
 }
+
+/**
+ * Forget this device's copy of the data and its unsent changes: at logout, and
+ * when another person logs in on the same device.
+ */
+export async function idbClearLedger(): Promise<void> {
+  await idbSet("ledger-snapshot", undefined);
+  await idbSet("ledger-queue", []);
+}

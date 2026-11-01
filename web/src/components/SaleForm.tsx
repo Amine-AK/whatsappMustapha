@@ -15,6 +15,7 @@ import {
 import { formatMoroccoPhone, isManualPeriod, isValidPhone, nextDateForPeriod, PERIODS } from "@/lib/sheet-logic";
 import { currentSeller, findByCode, marginCheck, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
+import { can } from "@/lib/roles";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { CategoryIcon } from "./CategoryIcon";
 import { useScannerInput } from "./useScannerInput";
@@ -64,7 +65,9 @@ export function SaleForm({
   onDone: (done: SaleDone) => void;
 }) {
   const ledger = data.ledger!;
-  const [type, setType] = useState<SaleType>(lockedClientId ? "كريدي" : initialType);
+  // Only the kinds of sale this user may make.
+  const types = (["كاش", "كريدي"] as SaleType[]).filter((t) => can(data.me, t === "كاش" ? "sell_cash" : "sell_credit"));
+  const [type, setType] = useState<SaleType>(lockedClientId ? "كريدي" : types.includes(initialType) ? initialType : (types[0] ?? initialType));
   const [query, setQuery] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   /** Family chosen with the big buttons: its products are listed. */
@@ -292,9 +295,9 @@ export function SaleForm({
   return (
     <>
     <form ref={formRef} className="sale-form" onSubmit={submit} noValidate>
-      {!lockedClientId && (
+      {!lockedClientId && types.length > 1 && (
         <div className="segmented wide-seg sale-type" role="group" aria-label="نوع البيع">
-          {(["كاش", "كريدي"] as SaleType[]).map((t) => (
+          {types.map((t) => (
             <button key={t} type="button" className={type === t ? "on" : ""} aria-pressed={type === t} onClick={() => setType(t)}>
               {t === "كاش" ? "💵 بيع كاش" : "📒 بيع كريدي"}
             </button>

@@ -6,6 +6,7 @@ import { CONDITIONS, newLedgerId, nowParts, productCodes, type Condition, type S
 import { displayDate } from "@/lib/receipt";
 import { currentSeller, findByCode, normalizeText, parseCodes, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
+import { can, seesCost } from "@/lib/roles";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { CategoryForm } from "./CategoryForm";
 import { CategoryIcon } from "./CategoryIcon";
@@ -36,6 +37,8 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const [sub, setSub] = useState<Sub>(null);
 
   const viewRef = useRef<HTMLDivElement>(null);
+  const fullStock = can(data.me, "stock");
+  const cost = seesCost(data.me);
 
   /** Scanned (camera or USB scanner): more of a known product, or a new card with the code. */
   function scanned(code: string) {
@@ -70,11 +73,13 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           <span className="stat-value">{low}</span>
           <span className="stat-sub">{LOW} ولا قل</span>
         </div>
-        <div className="stat">
-          <span className="stat-label">قيمة المخزون</span>
-          <span className="stat-value">{money(value)}</span>
-          <span className="stat-sub">بثمن الشراء</span>
-        </div>
+        {data.me?.role === "owner" && (
+          <div className="stat">
+            <span className="stat-label">قيمة المخزون</span>
+            <span className="stat-value">{money(value)}</span>
+            <span className="stat-sub">بثمن الشراء</span>
+          </div>
+        )}
       </section>
 
       <div className="actions-row in-flow">
@@ -133,7 +138,13 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         <ul className="stock-list">
           {list.slice(0, 300).map((s) => (
             <li key={s.id} className={`stock-row ${s.quantity <= 0 ? "out" : s.quantity <= LOW ? "low" : ""}`}>
-              <button type="button" className="stock-open" onClick={() => setSub({ kind: "edit", item: s })} aria-label={`تعديل ${s.item}`}>
+              <button
+                type="button"
+                className="stock-open"
+                // The stock manager adds products and deliveries; changing a product needs full stock rights.
+                onClick={() => (fullStock ? setSub({ kind: "edit", item: s }) : setSub({ kind: "adjust", item: s }))}
+                aria-label={fullStock ? `تعديل ${s.item}` : `زيد الكمية ديال ${s.item}`}
+              >
                 <span className="stock-name">
                   <strong>{s.item}</strong>
                   <span className="muted small">
@@ -143,7 +154,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
                 </span>
                 <span className="stock-price">
                   <span className="amount">{money(s.sellPrice)}</span>
-                  <span className="muted small">شراء {money(s.buyPrice)}</span>
+                  {cost && <span className="muted small">شراء {money(s.buyPrice)}</span>}
                 </span>
               </button>
               <button type="button" className={`qty-pill ${s.quantity <= 0 ? "out" : s.quantity <= LOW ? "low" : ""}`} onClick={() => setSub({ kind: "adjust", item: s })} aria-label={`الكمية ديال ${s.item}: ${s.quantity}. بدل`}>
@@ -168,7 +179,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           }}
         />
       )}
-      {sub?.kind === "adjust" && <AdjustForm data={data} item={sub.item} scanned={sub.scanned} newCode={sub.newCode} onClose={() => setSub(null)} onSaved={onToast} />}
+      {sub?.kind === "adjust" && <AdjustForm data={data} item={sub.item} canRemove={fullStock} scanned={sub.scanned} newCode={sub.newCode} onClose={() => setSub(null)} onSaved={onToast} />}
       {sub?.kind === "unknown-code" && (
         <UnknownCode
           stock={ledger.stock}
@@ -364,9 +375,12 @@ function StockForm({
             ))}
           </select>
         </Field>
-        <Field id="st-buyPrice" label="ثمن الشراء" error={errors.buyPrice} hint="ديال الوحدة، درهم">
-          <input id="st-buyPrice" inputMode="decimal" dir="ltr" value={v.buyPrice} onChange={(e) => set("buyPrice")(e.target.value)} />
-        </Field>
+        {/* Without cost visibility the price can be entered for a new product, never read back. */}
+        {(!item || seesCost(data.me)) && (
+          <Field id="st-buyPrice" label="ثمن الشراء" error={errors.buyPrice} hint="ديال الوحدة، درهم">
+            <input id="st-buyPrice" inputMode="decimal" dir="ltr" value={v.buyPrice} onChange={(e) => set("buyPrice")(e.target.value)} />
+          </Field>
+        )}
         <Field id="st-sellPrice" label="ثمن البيع" error={errors.sellPrice} hint={suggested ? `اقتراح بهامش ${target}%: ${money(suggested)}` : "درهم"}>
           <input id="st-sellPrice" inputMode="decimal" dir="ltr" placeholder={suggested ? String(suggested) : ""} value={v.sellPrice} onChange={(e) => set("sellPrice")(e.target.value)} />
         </Field>
@@ -431,11 +445,14 @@ function AdjustForm({
   item,
   scanned,
   newCode,
+  canRemove = true,
   onClose,
   onSaved,
 }: {
   data: LedgerState;
   item: StockItem;
+  /** Taking stock out (losses, returns to the supplier) needs full stock rights. */
+  canRemove?: boolean;
   scanned?: boolean;
   /** A new supplier's code, added to the product with this delivery. */
   newCode?: string;
@@ -501,9 +518,11 @@ function AdjustForm({
           <button type="button" className={sign === 1 ? "on" : ""} aria-pressed={sign === 1} onClick={() => setSign(1)}>
             ＋ زيد
           </button>
-          <button type="button" className={sign === -1 ? "on" : ""} aria-pressed={sign === -1} onClick={() => setSign(-1)}>
-            − نقص
-          </button>
+          {canRemove && (
+            <button type="button" className={sign === -1 ? "on" : ""} aria-pressed={sign === -1} onClick={() => setSign(-1)}>
+              − نقص
+            </button>
+          )}
         </div>
         <Field id="adj-amount" label="شحال" error={error}>
           <input id="adj-amount" inputMode="numeric" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} autoFocus />

@@ -5,6 +5,7 @@ import { money } from "@/lib/format";
 import type { Sale } from "@/lib/ledger";
 import { displayDate, displayDateTime } from "@/lib/receipt";
 import { filterSales, percent, rangeOf, report, type Group, type RangePreset } from "@/lib/shop";
+import { can, seesCost } from "@/lib/roles";
 import { SaleTicketDialog } from "./SaleTicket";
 import type { LedgerState } from "./useLedger";
 import { Confirm } from "./ui";
@@ -21,6 +22,7 @@ const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "ماي"
 
 export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (msg: string) => void }) {
   const ledger = data.ledger!;
+  const cost = seesCost(data.me);
   const [preset, setPreset] = useState<RangePreset>("month");
   const [custom, setCustom] = useState({ from: data.today.slice(0, 8) + "01", to: data.today });
   const [category, setCategory] = useState("");
@@ -86,11 +88,13 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
             {r.tickets} بيعة · {r.units} وحدة
           </span>
         </div>
+        {cost && (
         <div className="stat profit-stat">
           <span className="stat-label">الأرباح الصافية</span>
           <span className="stat-value">{money(r.profit)}</span>
           <span className="stat-sub">{r.unknownCost > 0 ? `${r.unknownCost} بلا ثمن الشراء (ما محسوبينش)` : r.revenue > 0 ? `${percent(r.profit, r.revenue)}% من المبيعات` : "—"}</span>
         </div>
+        )}
         <div className="stat">
           <span className="stat-label">كاش / كريدي</span>
           <span className="stat-value">
@@ -109,11 +113,11 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
         <p className="empty">ما كاين حتى بيع فهاد المدة.</p>
       ) : (
         <>
-          {r.series.length > 1 && <Chart series={r.series} monthly={r.monthly} />}
+          {r.series.length > 1 && <Chart series={r.series} monthly={r.monthly} cost={cost} />}
 
           <section aria-label="حسب الفئة">
             <h2 className="section-title">حسب الفئة</h2>
-            <Bars groups={r.byCategory} total={r.revenue} />
+            <Bars groups={r.byCategory} total={r.revenue} cost={cost} />
           </section>
 
           <section aria-label="السلع">
@@ -124,7 +128,7 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
                   <th>السلعة</th>
                   <th>الوحدات</th>
                   <th>المبيعات</th>
-                  <th>الربح</th>
+                  {cost && <th>الربح</th>}
                 </tr>
               </thead>
               <tbody>
@@ -133,7 +137,7 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
                     <td>{g.name}</td>
                     <td dir="ltr">{g.units}</td>
                     <td>{money(g.revenue)}</td>
-                    <td>{money(g.profit)}</td>
+                    {cost && <td>{money(g.profit)}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -158,7 +162,7 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
                       {s.type}
                       {s.clientId ? ` · ${names.get(s.clientId) ?? "زبون مأرشف"}` : ""}
                       {s.seller ? ` · ${s.seller}` : ""}
-                      {s.buyPrice !== null ? ` · ربح ${money(s.sellPrice - s.buyPrice)}` : ""}
+                      {cost && s.buyPrice !== null ? ` · ربح ${money(s.sellPrice - s.buyPrice)}` : ""}
                     </span>
                     <span className="row-actions">
                       {s.type === "كاش" && (
@@ -166,9 +170,11 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
                           وصل
                         </button>
                       )}
+{can(data.me, "cancel_sale") && (
                       <button type="button" className="link-btn danger-text" onClick={() => setCancel(s)}>
                         إلغاء
                       </button>
+                      )}
                     </span>
                   </span>
                   <span className="amount">{money(s.sellPrice)}</span>
@@ -203,7 +209,7 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
   );
 }
 
-function Bars({ groups, total }: { groups: Group[]; total: number }) {
+function Bars({ groups, total, cost }: { groups: Group[]; total: number; cost: boolean }) {
   return (
     <ul className="bars">
       {groups.map((g) => (
@@ -211,7 +217,7 @@ function Bars({ groups, total }: { groups: Group[]; total: number }) {
           <div className="bar-head">
             <strong>{g.name}</strong>
             <span className="muted small">
-              {g.units} وحدة · ربح {money(g.profit)}
+              {g.units} وحدة{cost ? ` · ربح ${money(g.profit)}` : ""}
             </span>
             <span className="amount">{money(g.revenue)}</span>
           </div>
@@ -225,7 +231,7 @@ function Bars({ groups, total }: { groups: Group[]; total: number }) {
 }
 
 /** Revenue per day (or month) as bars, profit as the darker part. */
-function Chart({ series, monthly }: { series: { key: string; revenue: number; profit: number }[]; monthly: boolean }) {
+function Chart({ series, monthly, cost }: { series: { key: string; revenue: number; profit: number }[]; monthly: boolean; cost: boolean }) {
   const W = 600;
   const H = 160;
   const max = Math.max(1, ...series.map((p) => p.revenue));
@@ -258,7 +264,13 @@ function Chart({ series, monthly }: { series: { key: string; revenue: number; pr
         })}
       </svg>
       <p className="chart-legend small">
-        <span className="dot rev" /> المبيعات <span className="dot profit" /> الربح
+        <span className="dot rev" /> المبيعات
+        {cost && (
+          <>
+            {" "}
+            <span className="dot profit" /> الربح
+          </>
+        )}
       </p>
     </section>
   );
