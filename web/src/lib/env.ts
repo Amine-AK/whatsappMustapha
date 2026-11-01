@@ -23,6 +23,8 @@ export const env = {
   // Only for local testing against a fake Sheets server.
   staticAccessToken: () => process.env.GOOGLE_ACCESS_TOKEN || "",
 
+  // DEV ONLY: the «مسح جميع المعلومات» button works only when this is "true". Remove before going live.
+  allowDataReset: () => process.env.ALLOW_DATA_RESET === "true",
   watiEndpoint: () => (process.env.WATI_API_ENDPOINT || "").replace(/\/+$/, ""),
   watiToken: () => (process.env.WATI_ACCESS_TOKEN || "").replace(/^Bearer\s+/i, ""),
   watiTemplate: () => process.env.WATI_TEMPLATE_NAME || "",

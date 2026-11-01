@@ -9,6 +9,7 @@ import { displayDate, installmentText } from "@/lib/receipt";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { ArchiveView } from "./ArchiveView";
 import { BackupDialog } from "./BackupDialog";
+import { DevResetDialog } from "./DevReset"; // DEV ONLY
 import { CaisseView } from "./CaisseView";
 import { ReportsView } from "./ReportsView";
 import { SaleForm, type SaleDone } from "./SaleForm";
@@ -62,6 +63,7 @@ type Dialog =
   | { kind: "archive-all" }
   | { kind: "backup"; reminder?: boolean }
   | { kind: "sale-ticket"; ticket: string }
+  | { kind: "dev-reset" } // DEV ONLY
   | null;
 
 type View = "credit" | "sell" | "stock" | "caisse" | "reports";
@@ -214,6 +216,8 @@ export function Dashboard() {
           </button>
           <TopMenu
             online={online}
+            devReset={data.devReset}
+            onDevReset={() => setDialog({ kind: "dev-reset" })}
             onToast={setToast}
             onSendBackup={() => setDialog({ kind: "backup" })}
             onLogout={async () => {
@@ -455,6 +459,8 @@ export function Dashboard() {
       {dialog?.kind === "sale-ticket" && data.ledger && (
         <SaleTicketDialog lines={data.ledger.sales.filter((x) => x.ticket === dialog.ticket)} notice="تسجل البيع ✓" onClose={() => setDialog(null)} />
       )}
+      {/* DEV ONLY */}
+      {dialog?.kind === "dev-reset" && <DevResetDialog data={data} onClose={() => setDialog(null)} onToast={setToast} />}
       {dialog?.kind === "backup" && (
         <BackupDialog reminder={dialog.reminder} pending={data.pendingCount} onClose={() => setDialog(null)} onToast={setToast} />
       )}

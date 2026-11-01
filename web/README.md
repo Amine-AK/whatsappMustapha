@@ -117,21 +117,18 @@ was set up before them):
   cost and profit are shown, and a price under cost is refused. «شراء جديد» in a
   customer's account uses the same form, so every sale is in the reports.
   A cash sale prints a «وصل البيع» ticket.
-- **Serial numbers (S/N / IMEI):** one product can have many units, each with
-  its own S/N (one per line in «الأرقام التسلسلية»; a USB scanner fills the box
-  code after code). The quantity is the number of S/N. Deliveries add S/N and
-  losses tick the ones that went (in «±», logged in حركات المخزون). In a sale,
-  each unit's S/N is chosen (or scanned: the S/N finds its product); it leaves
-  stock, is saved with the sale and printed on the receipt; cancelling puts it
-  back. A S/N can't be in stock twice or sold twice. Scanning a sold S/N in
-  المخزون says when and to whom it was sold (warranty). Columns
-  «الأرقام التسلسلية (S/N)» in المخزون, المبيعات and حركات المخزون (added on their
-  own to existing sheets). The «الباركود» field stays for the code that is the
-  same on every box.
+- **Several codes per product (one per supplier):** the same product bought
+  from different suppliers comes with different QR codes / barcodes / S/N. All
+  of them go in the product's «الأكواد» box (one per line) and all lead to the
+  same product; sales don't use codes up. Scanning a code that leads to no
+  product asks «سلعة جديدة» or an existing product from a new supplier: the code
+  is then added to it with the delivery (logged in حركات المخزون). A code can
+  belong to one product only. Sheet: «الكود» (first code) and «أكواد أخرى
+  (موردين آخرين)» (one per line) in المخزون, «أكواد جديدة» in حركات المخزون.
 - **📷 Scanning (QR / barcode):** «📷 سكاني» in المخزون opens the camera. A
   code already in stock asks how many arrived (+1); a new code opens «سلعة
   جديدة» with it filled in. 📷 in the البيع search bar puts the scanned product
-  in the sale. The code is kept in the «الباركود / IMEI» column. Works with
+  in the sale. The codes are kept in the «الكود» / «أكواد أخرى» columns. Works with
   the phone camera and with a PC webcam: phones use the browser's built-in
   reader; PCs and iPhones download a reader (`@zxing/library`, ~450 KB) the
   first time the scanner opens. The code can also be typed.
@@ -310,6 +307,21 @@ What makes syncing safe:
 - **Archive and restore need internet**, and wait until every change is synced.
 - The changes waiting on a device live in that browser's storage. Clearing the
   browser data, or uninstalling the app, before they're synced loses them.
+
+## DEV ONLY: «مسح جميع المعلومات» (empty the sheet while testing)
+
+With `ALLOW_DATA_RESET=true` in Vercel (then Redeploy), the ⚙️ menu shows
+«🧪 مسح جميع المعلومات (تطوير)». It downloads an Excel backup (ticked by
+default), asks to type «مسح», then empties every app tab of the Google Sheet
+(titles stay, the default families come back, `Feuille 1` is not touched) and
+forgets this device's unsent changes. Without the variable the button is hidden
+and `/api/dev/reset` answers 403. Other phones should reload the app after a
+reset, or their unsent changes could come back.
+
+**Before going live:** delete `ALLOW_DATA_RESET` in Vercel. To remove the code:
+`src/lib/dev-reset.ts`, `src/app/api/dev/`, `src/components/DevReset.tsx`, and
+the lines marked `DEV ONLY` (env.ts, api/data, useLedger.ts, TopMenu.tsx,
+Dashboard.tsx).
 
 ## Security
 
