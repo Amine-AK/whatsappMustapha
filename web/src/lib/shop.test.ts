@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyOp, emptyLedger, summarizeClient, type Ledger, type LedgerOp, type Purchase, type Sale, type StockItem } from "./ledger";
 import { ledgerToRows, rowsToLedger, TABS } from "./ledger-sheet";
-import { cashDay, categoryIcon, filterSales, findByCode, marginCheck, normalizeText, rangeOf, report, searchStock } from "./shop";
+import { cashDay, categoryIcon, filterSales, findByCode, parseCodes, marginCheck, normalizeText, rangeOf, report, searchStock } from "./shop";
 
 const AT = "2026-10-20T09:00:00.000Z";
 let n = 0;
@@ -15,7 +15,7 @@ function run(l: Ledger, body: object) {
 
 const iphone: StockItem = {
   id: "I-IPHONE11", item: "iPhone 11 64GB", category: "هواتف وأجهزة", condition: "مستعمل", buyPrice: 2000, sellPrice: 2600,
-  quantity: 3, serial: "356789012345678", notes: "", createdAt: AT, updatedAt: AT,
+  quantity: 3, serial: "356789012345678", notes: "", createdAt: AT, updatedAt: AT, codes: [],
 };
 const charger: StockItem = { ...iphone, id: "I-CHARGER1", item: "شارجور Type-C سامسونگ", category: "إكسسوارات وكابلات", condition: "جديد", buyPrice: 20, sellPrice: 50, quantity: 10, serial: "" };
 const fridge: StockItem = { ...iphone, id: "I-FRIDGE01", item: "ثلاجة Samsung 400L", category: "كهرومنزلي كبير", condition: "جديد", buyPrice: 5000, sellPrice: 6200, quantity: 0, serial: "" };
@@ -161,6 +161,43 @@ describe("cash drawer and reports", () => {
     expect(rangeOf("month", "2026-10-22")).toEqual({ from: "2026-10-01", to: "2026-10-22" });
     expect(rangeOf("year", "2026-10-22").from).toBe("2026-01-01");
     expect(report([], "2026-01-01", "2026-10-22").monthly).toBe(true);
+  });
+});
+
+describe("one product, several codes (one per supplier)", () => {
+  const charger2 = { ...charger, serial: "QR-SUPPLIER-A", codes: ["6291041500213"] };
+  const start = () => run(emptyLedger(), { type: "stock.add", item: charger2 });
+
+  it("finds the product from any of its codes, and sales don't use codes up", () => {
+    const l = start();
+    expect(findByCode(l.stock, "qr-supplier-a")?.id).toBe(charger.id);
+    expect(findByCode(l.stock, "6291041500213")?.id).toBe(charger.id);
+    const sold = run(l, { type: "sale.add", lines: [line({ stockId: charger.id, item: charger.item })], purchases: [] });
+    expect(sold.stock[0].quantity).toBe(9);
+    expect(findByCode(sold.stock, "6291041500213")?.id).toBe(charger.id);
+  });
+
+  it("a new supplier's code comes with the delivery, once", () => {
+    const move = { type: "stock.adjust", move: { id: "M-NEWSUP01", stockId: charger.id, date: "2026-10-20", delta: 5, reason: "وصلات", seller: "", createdAt: AT, codesIn: ["SUPPLIER-B-777"] } };
+    const o = op(move);
+    const l = applyOp(start(), o).ledger;
+    expect(l.stock[0].codes).toEqual(["6291041500213", "SUPPLIER-B-777"]);
+    expect(l.stock[0].quantity).toBe(15);
+    expect(applyOp(l, o).result).toBe("already");
+    // Saved in the sheet (one per line) and read back.
+    const rows = ledgerToRows(l, "2026-10-20");
+    expect(rows.stock.get(charger.id)![7]).toBe("QR-SUPPLIER-A");
+    expect(rows.stock.get(charger.id)![11]).toBe("6291041500213\nSUPPLIER-B-777");
+    const back = rowsToLedger({ stock: [rows.stock.get(charger.id)!], moves: [...rows.moves.values()] });
+    expect(back.stock[0].codes).toEqual(l.stock[0].codes);
+    expect(back.moves[0].codesIn).toEqual(["SUPPLIER-B-777"]);
+  });
+
+  it("a code leads to one product only", () => {
+    const l = start();
+    expect(applyOp(l, op({ type: "stock.add", item: { ...fridge, serial: "", codes: ["6291041500213"] } })).result).toBe("invalid");
+    expect(applyOp(l, op({ type: "stock.add", item: { ...fridge, codes: [] } })).result).toBe("ok");
+    expect(parseCodes(" A1\nB2, b2\n\n C3 ;A1")).toEqual(["A1", "B2", "C3"]);
   });
 });
 

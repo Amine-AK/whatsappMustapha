@@ -84,8 +84,10 @@ export interface StockItem {
   sellPrice: number;
   /** Can go below 0 when sold before being counted in: shown as a warning. */
   quantity: number;
-  /** IMEI / serial, optional. */
+  /** Main code of the product (QR / barcode / S/N), optional. */
   serial: string;
+  /** More codes for the same product: each supplier's QR / barcode / S/N. */
+  codes: string[];
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -149,6 +151,8 @@ export interface StockMove {
   stockId: string;
   date: string;
   delta: number;
+  /** Codes of a new supplier, added to the product with this delivery. */
+  codesIn?: string[];
   reason: string;
   seller: string;
   createdAt: string;
@@ -193,7 +197,13 @@ export const EMPTY_LEDGER: Ledger = emptyLedger();
 
 /** A ledger saved by an older version of the app (before the shop tabs) gets the missing lists. */
 export function normalizeLedger(l: Partial<Ledger> | null | undefined): Ledger {
-  return { ...emptyLedger(), ...(l ?? {}) } as Ledger;
+  const full = { ...emptyLedger(), ...(l ?? {}) } as Ledger;
+  return { ...full, stock: full.stock.map((s) => (Array.isArray(s.codes) ? s : { ...s, codes: [] })) };
+}
+
+/** Every code of a product: the main one and the other suppliers'. */
+export function productCodes(s: Pick<StockItem, "serial" | "codes">): string[] {
+  return [s.serial, ...(s.codes ?? [])].map((x) => x.trim()).filter(Boolean);
 }
 
 // ---------------------------------------------------------------- ids
@@ -239,7 +249,7 @@ type OpBody =
       type: "stock.update";
       id: string;
       base: string;
-      patch: Partial<Pick<StockItem, "item" | "category" | "condition" | "buyPrice" | "sellPrice" | "serial" | "notes">>;
+      patch: Partial<Pick<StockItem, "item" | "category" | "condition" | "buyPrice" | "sellPrice" | "serial" | "codes" | "notes">>;
     }
   | { type: "stock.adjust"; move: StockMove }
   | { type: "stock.delete"; id: string }
@@ -306,6 +316,25 @@ function checkPayment(p: Payment): string | null {
 
 const amount = (v: unknown) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 100_000_000;
 
+/** A list of product codes: short, one line each, no repeats. */
+function codeList(v: unknown): v is string[] {
+  if (!Array.isArray(v) || v.length > 200) return false;
+  if (!v.every((x) => typeof x === "string" && x.trim() !== "" && x.length <= 100 && !/[\n\r]/.test(x))) return false;
+  return new Set(v.map((x) => x.trim().toLowerCase())).size === v.length;
+}
+
+/** A code already used by another product, if any (a code must lead to one product only). */
+function codeTaken(ledger: Ledger, codes: string[], exceptId: string): string | undefined {
+  const mine = codes.map((x) => x.trim().toLowerCase()).filter(Boolean);
+  for (const s of ledger.stock) {
+    if (s.id === exceptId) continue;
+    const theirs = productCodes(s).map((x) => x.toLowerCase());
+    const hit = mine.find((x) => theirs.includes(x));
+    if (hit) return `«${hit}» مستعمل ديجا فـ «${s.item}»`;
+  }
+  return undefined;
+}
+
 function checkStock(s: StockItem): string | null {
   if (!isLedgerId(s.id) || !s.id.startsWith("I-")) return "رقم السلعة غير صحيح";
   if (!text(s.item, 300) || !s.item.trim()) return "اسم السلعة ضروري";
@@ -313,6 +342,7 @@ function checkStock(s: StockItem): string | null {
   if (!CONDITIONS.includes(s.condition)) return "الحالة غير صحيحة";
   if (!money(s.buyPrice) || !money(s.sellPrice)) return "الثمن غير صحيح";
   if (!amount(s.quantity) || !Number.isInteger(s.quantity)) return "الكمية غير صحيحة";
+  if (!codeList(s.codes ?? []) || new Set(productCodes(s).map((x) => x.toLowerCase())).size !== productCodes(s).length) return "الأكواد غير صحيحة ولا مكررة";
   return null;
 }
 
@@ -477,17 +507,18 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
     case "stock.add": {
       if (!op.item || typeof op.item !== "object") return invalid(ledger, "السلعة غير صحيحة");
       if (ledger.stock.some((s) => s.id === op.item.id)) return { ledger, result: "already" };
-      const err = checkStock(op.item);
+      const item = { ...op.item, codes: op.item.codes ?? [] };
+      const err = checkStock(item) ?? codeTaken(ledger, productCodes(item), item.id);
       if (err) return invalid(ledger, err);
-      return { ledger: { ...ledger, stock: [...ledger.stock, { ...op.item, updatedAt: op.at }] }, result: "ok" };
+      return { ledger: { ...ledger, stock: [...ledger.stock, { ...item, updatedAt: op.at }] }, result: "ok" };
     }
     case "stock.update": {
       const s = ledger.stock.find((x) => x.id === op.id);
       if (!s) return invalid(ledger, "هاد السلعة ما بقاتش فالمخزون");
       if (s.updatedAt === op.at) return { ledger, result: "already" };
       if (s.updatedAt !== op.base) return { ledger, result: "conflict", message: CONFLICT };
-      const next = { ...s, ...pick<StockItem>(op.patch, ["item", "category", "condition", "buyPrice", "sellPrice", "serial", "notes"]), updatedAt: op.at };
-      const err = checkStock(next);
+      const next = { ...s, ...pick<StockItem>(op.patch, ["item", "category", "condition", "buyPrice", "sellPrice", "serial", "codes", "notes"]), updatedAt: op.at };
+      const err = checkStock(next) ?? codeTaken(ledger, productCodes(next), next.id);
       if (err) return invalid(ledger, err);
       return { ledger: { ...ledger, stock: replace(ledger.stock, s.id, next) }, result: "ok" };
     }
@@ -497,10 +528,18 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       if (ledger.moves.some((x) => x.id === m.id)) return { ledger, result: "already" };
       const s = ledger.stock.find((x) => x.id === m.stockId);
       if (!s) return invalid(ledger, "هاد السلعة ما بقاتش فالمخزون");
-      if (!isLedgerId(m.id) || !m.id.startsWith("M-") || !Number.isInteger(m.delta) || !m.delta || !amount(m.delta)) return invalid(ledger, "الكمية غير صحيحة");
+      if (!isLedgerId(m.id) || !m.id.startsWith("M-") || !Number.isInteger(m.delta) || (!m.delta && !m.codesIn?.length) || !amount(m.delta)) {
+        return invalid(ledger, "الكمية غير صحيحة");
+      }
       if (!date(m.date) || !text(m.reason, 300) || !text(m.seller, 100)) return invalid(ledger, "معلومات غير صحيحة");
+      const codesIn = m.codesIn ?? [];
+      if (!codeList(codesIn)) return invalid(ledger, "الأكواد غير صحيحة");
+      const taken = codeTaken(ledger, codesIn, s.id);
+      if (taken) return invalid(ledger, taken);
+      const have = productCodes(s).map((x) => x.toLowerCase());
+      const added = codesIn.map((x) => x.trim()).filter((x) => !have.includes(x.toLowerCase()));
       // A difference, not a new total: counts from two phones add up instead of overwriting each other.
-      const next = { ...s, quantity: s.quantity + m.delta, updatedAt: op.at };
+      const next = { ...s, quantity: s.quantity + m.delta, codes: [...s.codes, ...added], updatedAt: op.at };
       return { ledger: { ...ledger, stock: replace(ledger.stock, s.id, next), moves: [...ledger.moves, m] }, result: "ok" };
     }
     case "stock.delete": {

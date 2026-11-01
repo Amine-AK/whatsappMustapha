@@ -2,9 +2,9 @@
 
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { money } from "@/lib/format";
-import { CONDITIONS, newLedgerId, nowParts, type Condition, type StockItem } from "@/lib/ledger";
+import { CONDITIONS, newLedgerId, nowParts, productCodes, type Condition, type StockItem } from "@/lib/ledger";
 import { displayDate } from "@/lib/receipt";
-import { currentSeller, findByCode, normalizeText, round2, searchStock } from "@/lib/shop";
+import { currentSeller, findByCode, normalizeText, parseCodes, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { CategoryForm } from "./CategoryForm";
@@ -20,7 +20,8 @@ const REASONS = ["وصلات السلعة", "جرد (تصحيح)", "خاسرة /
 type Sub =
   | { kind: "add"; code?: string }
   | { kind: "edit"; item: StockItem }
-  | { kind: "adjust"; item: StockItem; scanned?: boolean }
+  | { kind: "adjust"; item: StockItem; scanned?: boolean; newCode?: string }
+  | { kind: "unknown-code"; code: string }
   | { kind: "delete"; item: StockItem }
   | { kind: "scan" }
   | { kind: "categories" }
@@ -40,7 +41,8 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   function scanned(code: string) {
     const found = findByCode(ledger.stock, code);
     setQuery("");
-    setSub(found ? { kind: "adjust", item: found, scanned: true } : { kind: "add", code });
+    // Unknown code: a new product, or a known one from a new supplier.
+    setSub(found ? { kind: "adjust", item: found, scanned: true } : { kind: "unknown-code", code });
   }
   useScannerInput(scanned, viewRef);
 
@@ -136,7 +138,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
                   <strong>{s.item}</strong>
                   <span className="muted small">
                     {s.category || "بلا فئة"} · {s.condition}
-                    {s.serial ? ` · ${s.serial}` : ""}
+                    {productCodes(s).length > 1 ? ` · 🏷️ ${productCodes(s).length} أكواد` : s.serial ? ` · ${s.serial}` : ""}
                   </span>
                 </span>
                 <span className="stock-price">
@@ -166,7 +168,16 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           }}
         />
       )}
-      {sub?.kind === "adjust" && <AdjustForm data={data} item={sub.item} scanned={sub.scanned} onClose={() => setSub(null)} onSaved={onToast} />}
+      {sub?.kind === "adjust" && <AdjustForm data={data} item={sub.item} scanned={sub.scanned} newCode={sub.newCode} onClose={() => setSub(null)} onSaved={onToast} />}
+      {sub?.kind === "unknown-code" && (
+        <UnknownCode
+          stock={ledger.stock}
+          code={sub.code}
+          onClose={() => setSub(null)}
+          onNew={() => setSub({ kind: "add", code: sub.code })}
+          onAttach={(item) => setSub({ kind: "adjust", item, newCode: sub.code })}
+        />
+      )}
       {sub?.kind === "scan" && (
         <BarcodeScanner
           title="📷 سكاني السلعة"
@@ -259,7 +270,7 @@ function StockForm({
     buyPrice: item ? String(item.buyPrice) : "",
     sellPrice: item ? String(item.sellPrice) : "",
     quantity: "1",
-    serial: item?.serial ?? code ?? "",
+    codes: item ? productCodes(item).join("\n") : (code ?? ""),
     notes: item?.notes ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -273,7 +284,10 @@ function StockForm({
   const buy = parseAmount(v.buyPrice || "0");
   const suggested = buy > 0 && target > 0 ? Math.ceil((buy * (1 + target / 100)) / 10) * 10 : 0;
   const [scanning, setScanning] = useState(false);
-  const sameCode = v.serial.trim() ? ledger.stock.find((s) => s.id !== item?.id && s.serial.trim().toLowerCase() === v.serial.trim().toLowerCase()) : undefined;
+  const codeList = parseCodes(v.codes).map(fixAzertyDigits);
+  const sameCode = codeList
+    .map((c) => ({ c, other: ledger.stock.find((s) => s.id !== item?.id && productCodes(s).some((x) => x.toLowerCase() === c.toLowerCase())) }))
+    .find((x) => x.other);
   const duplicate = !item && v.item.trim() && ledger.stock.find((s) => normalizeText(s.item) === normalizeText(v.item) && s.condition === v.condition);
 
   function submit(e: FormEvent) {
@@ -286,11 +300,12 @@ function StockForm({
     if (!(sell > 0)) err.sellPrice = "ثمن البيع ضروري";
     else if (buy > 0 && sell < buy) err.sellPrice = "ثمن البيع تحت ثمن الشراء";
     if (!item && (!Number.isInteger(qty) || qty < 0)) err.quantity = "الكمية غير صحيحة";
+    if (sameCode) err.codes = `الكود «${sameCode.c}» مستعمل ديجا فـ «${sameCode.other!.item}»`;
     setErrors(err);
     if (Object.keys(err).length) return;
     const ops: Parameters<LedgerState["run"]>[1][] = [];
     const at = new Date().toISOString();
-    const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: fixAzertyDigits(v.serial), notes: v.notes.trim() };
+    const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: codeList[0] ?? "", codes: codeList.slice(1), notes: v.notes.trim() };
     if (item) {
       ops.push({ type: "stock.update", id: item.id, base: item.updatedAt, patch: fields });
       data.run(`تعديل سلعة · ${fields.item}`, ...ops);
@@ -361,14 +376,15 @@ function StockForm({
           </Field>
         )}
         <Field
-          id="st-serial"
-          label="الباركود / IMEI"
-          hint={sameCode ? `⚠️ هاد الكود عند: ${sameCode.item}` : code ? "✓ تسكانا" : "اختياري · سكاني ولا كتب"}
+          id="st-codes"
+          label="الأكواد (QR / باركود / S/N)"
+          error={errors.codes}
+          hint={code && !item ? "✓ تسكانا · زيد أكواد موردين آخرين إلا كانو" : "اختياري · كل مورد عندو كود: وحدة فكل سطر · سكاني ولا كتب"}
           wide
         >
           <div className="code-row">
-            <input id="st-serial" dir="ltr" value={v.serial} onChange={(e) => set("serial")(e.target.value)} />
-            <button type="button" className="btn" onClick={() => setScanning(true)} aria-label="سكاني الكود بالكاميرا">
+            <textarea id="st-codes" dir="ltr" rows={2} value={v.codes} onChange={(e) => set("codes")(e.target.value)} />
+            <button type="button" className="btn" onClick={() => setScanning(true)} aria-label="سكاني كود بالكاميرا">
               📷
             </button>
           </div>
@@ -401,7 +417,7 @@ function StockForm({
         <BarcodeScanner
           onClose={() => setScanning(false)}
           onResult={(c) => {
-            set("serial")(c);
+            setV((o) => ({ ...o, codes: o.codes.trim() ? `${o.codes.trim()}\n${c}` : c }));
             setScanning(false);
           }}
         />
@@ -414,12 +430,15 @@ function AdjustForm({
   data,
   item,
   scanned,
+  newCode,
   onClose,
   onSaved,
 }: {
   data: LedgerState;
   item: StockItem;
   scanned?: boolean;
+  /** A new supplier's code, added to the product with this delivery. */
+  newCode?: string;
   onClose: () => void;
   onSaved: (msg: string) => void;
 }) {
@@ -432,11 +451,20 @@ function AdjustForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (!Number.isInteger(qty) || qty <= 0) return setError("الكمية غير صحيحة");
+    if (!Number.isInteger(qty) || qty < 0 || (qty === 0 && !newCode)) return setError("الكمية غير صحيحة");
     const delta = sign * qty;
     data.run(`${delta > 0 ? "+" : ""}${delta} · ${item.item}`, {
       type: "stock.adjust",
-      move: { id: newLedgerId("M"), stockId: item.id, date: nowParts().date, delta, reason, seller: currentSeller(), createdAt: new Date().toISOString() },
+      move: {
+        id: newLedgerId("M"),
+        stockId: item.id,
+        date: nowParts().date,
+        delta,
+        reason: newCode ? `${reason} · مورد جديد` : reason,
+        seller: currentSeller(),
+        createdAt: new Date().toISOString(),
+        ...(newCode ? { codesIn: [newCode] } : {}),
+      },
     });
     onSaved(`الكمية ولات ${item.quantity + delta}`);
     onClose();
@@ -459,6 +487,13 @@ function AdjustForm({
     >
       <form id="adjust-form" className="form-grid" noValidate onSubmit={submit}>
         {scanned && <p className="alert info wide">✓ هاد السلعة كاينة فالمخزون. شحال وصلات منها؟</p>}
+        {newCode && (
+          <p className="alert info wide">
+            <span>
+              ✓ الكود <bdi dir="ltr">{newCode}</bdi> غادي يتزاد لـ «{item.item}». شحال وصلات من هاد المورد؟
+            </span>
+          </p>
+        )}
         <p className="lead wide">
           دابا: <strong>{item.quantity}</strong> ← من بعد: <strong>{Number.isInteger(qty) && qty > 0 ? item.quantity + sign * qty : "—"}</strong>
         </p>
@@ -487,11 +522,67 @@ function AdjustForm({
               <li key={m.id}>
                 <span dir="ltr">{m.delta > 0 ? `+${m.delta}` : m.delta}</span> · {m.reason} · {displayDate(m.date)}
                 {m.seller ? ` · ${m.seller}` : ""}
+                {m.codesIn?.length ? (
+                  <>
+                    {" · 🏷️ "}
+                    <bdi dir="ltr">{m.codesIn.join(", ")}</bdi>
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
       </form>
+    </Modal>
+  );
+}
+
+/** A code that leads to no product: a new product, or a known one from a new supplier. */
+function UnknownCode({
+  stock,
+  code,
+  onClose,
+  onNew,
+  onAttach,
+}: {
+  stock: StockItem[];
+  code: string;
+  onClose: () => void;
+  onNew: () => void;
+  onAttach: (item: StockItem) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const results = query.trim() ? searchStock(stock, query, 20) : [...stock].sort((a, b) => a.item.localeCompare(b.item, "ar")).slice(0, 20);
+  return (
+    <Modal title="كود جديد" onClose={onClose}>
+      <p className="lead">
+        الكود <bdi dir="ltr">{code}</bdi> ما مربوط بحتى سلعة.
+      </p>
+      <button type="button" className="btn primary block" onClick={onNew}>
+        ＋ سلعة جديدة بهاد الكود
+      </button>
+      {stock.length > 0 && (
+        <>
+          <p className="section-title">ولا سلعة كاينة من مورد جديد؟ اختارها:</p>
+          <input type="search" className="search" placeholder="قلب على السلعة…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="قلب على السلعة" />
+          <ul className="cat-list">
+            {results.map((s) => (
+              <li key={s.id}>
+                <button type="button" onClick={() => onAttach(s)}>
+                  <span className="cat-list-name">
+                    <strong>{s.item}</strong>
+                    <span className="muted small">
+                      {s.category} · متوفر: {s.quantity}
+                      {productCodes(s).length ? ` · 🏷️ ${productCodes(s).length}` : ""}
+                    </span>
+                  </span>
+                  <span className="muted small">ربط ←</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </Modal>
   );
 }

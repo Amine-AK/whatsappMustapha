@@ -846,3 +846,12 @@ a.btn { text-decoration: none; }
 }
 .delete-mini:hover:not(:disabled) { background: var(--danger); color: #fff; }
 .delete-mini:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------------------------------------------------------------- product codes (QR / barcode / S/N) */
+
+.field textarea, .code-row textarea {
+  width: 100%; min-height: 64px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); font: inherit; font-size: 15px; resize: vertical;
+}
+.code-row textarea { flex: 1; min-width: 0; }
+.field textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }

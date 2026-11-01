@@ -60,14 +60,14 @@ export const HEADERS: Record<TableKey, string[]> = {
     "رقم الوصل", "رقم الزبون", "الزبون", "التاريخ", "الساعة", "المبلغ", "النوع", "رقم السلعة", "السلعة", "ملاحظات", "تاريخ الإضافة", "آخر تعديل",
   ],
   changes: ["رقم", "رقم الزبون", "الزبون", "التاريخ", "الطريطة القديمة", "الطريطة الجديدة", "المدة القديمة", "المدة الجديدة", "السبب", "تاريخ الإضافة"],
-  stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "الباركود / IMEI", "ملاحظات", "تاريخ الإضافة", "آخر تعديل"],
+  stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "الكود (QR / باركود / S/N)", "ملاحظات", "تاريخ الإضافة", "آخر تعديل", "أكواد أخرى (موردين آخرين)"],
   categories: ["الفئة", "الوصف", "هامش الربح المستهدف %", "الأيقونة"],
   sales: [
     "رقم البيع", "رقم التيكي", "التاريخ", "الساعة", "السلعة", "الفئة", "رقم السلعة فالمخزون", "الكمية",
     "ثمن الشراء", "الثمن المقترح", "ثمن البيع", "الربح", "النوع", "رقم الزبون", "الزبون", "رقم العملية",
     "البائع", "ملاحظات", "تاريخ الإضافة", "آخر تعديل",
   ],
-  moves: ["رقم", "رقم السلعة", "السلعة", "التاريخ", "التغيير", "السبب", "البائع", "تاريخ الإضافة"],
+  moves: ["رقم", "رقم السلعة", "السلعة", "التاريخ", "التغيير", "السبب", "البائع", "تاريخ الإضافة", "أكواد جديدة"],
   closings: [
     "رقم", "التاريخ", "الساعة", "البائع", "مبيعات الكاش", "تسبيقات الكريدي", "دفعات الطريطات", "المصاريف",
     "تفاصيل المصاريف", "الصافي فالقجر (المتوقع)", "المبلغ المحسوب", "الفرق", "ملاحظات", "تاريخ الإضافة",
@@ -147,6 +147,9 @@ export function rowToChange(r: unknown[]): InstallmentChange | null {
   };
 }
 
+/** Codes, one per line in the cell. */
+const lines = (v: unknown) => s(v).split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+
 /** Whole number that can be negative (parseSum drops the sign). */
 const int = (v: unknown) => Math.trunc(typeof v === "number" ? v : Number(s(v).replace(",", ".")) || 0);
 /** Empty cell = unknown (null), anything else a number. */
@@ -167,6 +170,7 @@ export function rowToStock(r: unknown[]): StockItem | null {
     notes: s(r[8]),
     createdAt: s(r[9]),
     updatedAt: s(r[10]),
+    codes: lines(r[11]),
   };
 }
 
@@ -203,7 +207,7 @@ export function rowToSale(r: unknown[]): Sale | null {
 export function rowToMove(r: unknown[]): StockMove | null {
   const id = s(r[0]);
   if (!id) return null;
-  return { id, stockId: s(r[1]), date: d(r[3]), delta: int(r[4]), reason: s(r[5]), seller: s(r[6]), createdAt: s(r[7]) };
+  return { id, stockId: s(r[1]), date: d(r[3]), delta: int(r[4]), reason: s(r[5]), seller: s(r[6]), createdAt: s(r[7]), ...(lines(r[8]).length ? { codesIn: lines(r[8]) } : {}) };
 }
 
 export function rowToClosing(r: unknown[]): CaisseClose | null {
@@ -283,7 +287,7 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
   const stock = new Map<string, Cell[]>(
     ledger.stock.map((x) => [
       x.id,
-      [x.id, x.item, x.category, x.condition, x.buyPrice, x.sellPrice, x.quantity, x.serial, x.notes, x.createdAt, x.updatedAt],
+      [x.id, x.item, x.category, x.condition, x.buyPrice, x.sellPrice, x.quantity, x.serial, x.notes, x.createdAt, x.updatedAt, (x.codes ?? []).join("\n")],
     ]),
   );
   const categories = new Map<string, Cell[]>(ledger.categories.map((c) => [c.name, [c.name, c.description, money(c.marginTarget), c.icon]]));
@@ -298,7 +302,7 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
     ]),
   );
   const moves = new Map<string, Cell[]>(
-    ledger.moves.map((m) => [m.id, [m.id, m.stockId, stockNames.get(m.stockId) ?? "", m.date, m.delta, m.reason, m.seller, m.createdAt]]),
+    ledger.moves.map((m) => [m.id, [m.id, m.stockId, stockNames.get(m.stockId) ?? "", m.date, m.delta, m.reason, m.seller, m.createdAt, (m.codesIn ?? []).join("\n")]]),
   );
   const closings = new Map<string, Cell[]>(
     ledger.closings.map((k) => [

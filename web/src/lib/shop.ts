@@ -1,7 +1,7 @@
 // Shop side of the app: finding products, the day's cash drawer and the sales reports.
 // Pure functions, used on the phone (offline too) and in tests.
 
-import { addDays, nowParts, type CaisseClose, type Category, type Ledger, type Payment, type Sale, type StockItem } from "./ledger";
+import { addDays, nowParts, productCodes, type CaisseClose, type Category, type Ledger, type Payment, type Sale, type StockItem } from "./ledger";
 
 // ---------------------------------------------------------------- search
 
@@ -34,7 +34,8 @@ export function searchStock(stock: StockItem[], query: string, limit = 8): Stock
   if (!tokens.length) return [];
   const scored: { item: StockItem; score: number }[] = [];
   for (const item of stock) {
-    const own = words(`${item.item} ${item.serial}`);
+    const codes = productCodes(item).join(" ");
+    const own = words(`${item.item} ${codes}`);
     const family = words(item.category);
     let score = 0;
     let ok = true;
@@ -42,7 +43,7 @@ export function searchStock(stock: StockItem[], query: string, limit = 8): Stock
       if (own.some((w) => w === t)) score += 4;
       else if (own.some((w) => w.startsWith(t))) score += 3;
       else if (family.some((w) => w.startsWith(t))) score += 1;
-      else if (t.length >= 3 && normalizeText(`${item.item} ${item.serial}`).includes(t)) score += 1;
+      else if (t.length >= 3 && normalizeText(`${item.item} ${codes}`).includes(t)) score += 1;
       else {
         ok = false;
         break;
@@ -60,14 +61,24 @@ export function searchStock(stock: StockItem[], query: string, limit = 8): Stock
 }
 
 /**
- * The product with exactly this code (barcode, QR or IMEI, kept in the serial
- * column). Several cards may share a barcode: one still in stock comes first.
+ * The product with exactly this code: any of its codes (QR / barcode / S/N),
+ * whichever supplier it came from.
  */
 export function findByCode(stock: StockItem[], code: string): StockItem | undefined {
   const c = code.trim().toLowerCase();
   if (!c) return undefined;
-  const same = stock.filter((s) => s.serial.trim().toLowerCase() === c);
+  const same = stock.filter((s) => productCodes(s).some((x) => x.toLowerCase() === c));
   return same.find((s) => s.quantity > 0) ?? same[0];
+}
+
+/** Codes typed or scanned in a box, one per line (or separated by , ;): no blanks, no repeats. */
+export function parseCodes(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.split(/[\n,;\t]+/)) {
+    const x = raw.trim().slice(0, 100);
+    if (x && !out.some((y) => y.toLowerCase() === x.toLowerCase())) out.push(x);
+  }
+  return out;
 }
 
 /** Icon of a product family, for the big buttons of the sale screen. */

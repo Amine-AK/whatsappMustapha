@@ -117,10 +117,18 @@ was set up before them):
   cost and profit are shown, and a price under cost is refused. «شراء جديد» in a
   customer's account uses the same form, so every sale is in the reports.
   A cash sale prints a «وصل البيع» ticket.
+- **Several codes per product (one per supplier):** the same product bought
+  from different suppliers comes with different QR codes / barcodes / S/N. All
+  of them go in the product's «الأكواد» box (one per line) and all lead to the
+  same product; sales don't use codes up. Scanning a code that leads to no
+  product asks «سلعة جديدة» or an existing product from a new supplier: the code
+  is then added to it with the delivery (logged in حركات المخزون). A code can
+  belong to one product only. Sheet: «الكود» (first code) and «أكواد أخرى
+  (موردين آخرين)» (one per line) in المخزون, «أكواد جديدة» in حركات المخزون.
 - **📷 Scanning (QR / barcode):** «📷 سكاني» in المخزون opens the camera. A
   code already in stock asks how many arrived (+1); a new code opens «سلعة
   جديدة» with it filled in. 📷 in the البيع search bar puts the scanned product
-  in the sale. The code is kept in the «الباركود / IMEI» column. Works with
+  in the sale. The codes are kept in the «الكود» / «أكواد أخرى» columns. Works with
   the phone camera and with a PC webcam: phones use the browser's built-in
   reader; PCs and iPhones download a reader (`@zxing/library`, ~450 KB) the
   first time the scanner opens. The code can also be typed.
