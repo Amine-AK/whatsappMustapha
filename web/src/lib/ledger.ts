@@ -84,10 +84,8 @@ export interface StockItem {
   sellPrice: number;
   /** Can go below 0 when sold before being counted in: shown as a warning. */
   quantity: number;
-  /** Barcode of the product (the same on every box), optional. */
+  /** IMEI / serial, optional. */
   serial: string;
-  /** Serial numbers / IMEI of the units in stock, one per unit. Empty = not tracked by S/N. */
-  serials: string[];
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -139,8 +137,6 @@ export interface Sale {
   clientId: string;
   /** Credit only: the purchase on the customer's account. */
   purchaseId: string;
-  /** Serial numbers / IMEI of the units sold (for the warranty). */
-  serials: string[];
   seller: string;
   notes: string;
   createdAt: string;
@@ -153,9 +149,6 @@ export interface StockMove {
   stockId: string;
   date: string;
   delta: number;
-  /** Units that came in (+) or went out (−), by serial number. */
-  serialsIn?: string[];
-  serialsOut?: string[];
   reason: string;
   seller: string;
   createdAt: string;
@@ -200,12 +193,7 @@ export const EMPTY_LEDGER: Ledger = emptyLedger();
 
 /** A ledger saved by an older version of the app (before the shop tabs) gets the missing lists. */
 export function normalizeLedger(l: Partial<Ledger> | null | undefined): Ledger {
-  const full = { ...emptyLedger(), ...(l ?? {}) } as Ledger;
-  return {
-    ...full,
-    stock: full.stock.map((s) => (Array.isArray(s.serials) ? s : { ...s, serials: [] })),
-    sales: full.sales.map((s) => (Array.isArray(s.serials) ? s : { ...s, serials: [] })),
-  };
+  return { ...emptyLedger(), ...(l ?? {}) } as Ledger;
 }
 
 // ---------------------------------------------------------------- ids
@@ -318,16 +306,6 @@ function checkPayment(p: Payment): string | null {
 
 const amount = (v: unknown) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 100_000_000;
 
-export const MAX_SERIALS = 500;
-
-/** A list of serial numbers: short codes, no duplicates. */
-function serialList(v: unknown, max = MAX_SERIALS): v is string[] {
-  if (!Array.isArray(v) || v.length > max) return false;
-  if (!v.every((x) => typeof x === "string" && x.trim() !== "" && x.length <= 100 && !/[\n\r]/.test(x))) return false;
-  return new Set(v.map((x) => x.trim().toLowerCase())).size === v.length;
-}
-const sameSerial = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
 function checkStock(s: StockItem): string | null {
   if (!isLedgerId(s.id) || !s.id.startsWith("I-")) return "رقم السلعة غير صحيح";
   if (!text(s.item, 300) || !s.item.trim()) return "اسم السلعة ضروري";
@@ -335,7 +313,6 @@ function checkStock(s: StockItem): string | null {
   if (!CONDITIONS.includes(s.condition)) return "الحالة غير صحيحة";
   if (!money(s.buyPrice) || !money(s.sellPrice)) return "الثمن غير صحيح";
   if (!amount(s.quantity) || !Number.isInteger(s.quantity)) return "الكمية غير صحيحة";
-  if (!serialList(s.serials ?? [])) return "الأرقام التسلسلية (S/N) غير صحيحة ولا مكررة";
   return null;
 }
 
@@ -348,7 +325,6 @@ function checkSale(s: Sale): string | null {
   if (!date(s.date) || !s.date || !time(s.time) || !text(s.createdAt, 40)) return "التاريخ غير صحيح";
   if (!text(s.seller, 100) || !text(s.notes, 1000)) return "معلومات البيع غير صحيحة";
   if (s.stockId && !isLedgerId(s.stockId)) return "السلعة غير صحيحة";
-  if (!serialList(s.serials ?? [], s.quantity) || (s.serials?.length && s.serials.length !== s.quantity)) return "الأرقام التسلسلية (S/N) غير صحيحة";
   return null;
 }
 
@@ -501,12 +477,9 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
     case "stock.add": {
       if (!op.item || typeof op.item !== "object") return invalid(ledger, "السلعة غير صحيحة");
       if (ledger.stock.some((s) => s.id === op.item.id)) return { ledger, result: "already" };
-      const item = { ...op.item, serials: op.item.serials ?? [] };
-      const err = checkStock(item);
+      const err = checkStock(op.item);
       if (err) return invalid(ledger, err);
-      const taken = serialTaken(ledger, item.serials);
-      if (taken) return invalid(ledger, `الـ S/N «${taken}» كاين ديجا فالمخزون`);
-      return { ledger: { ...ledger, stock: [...ledger.stock, { ...item, updatedAt: op.at }] }, result: "ok" };
+      return { ledger: { ...ledger, stock: [...ledger.stock, { ...op.item, updatedAt: op.at }] }, result: "ok" };
     }
     case "stock.update": {
       const s = ledger.stock.find((x) => x.id === op.id);
@@ -526,17 +499,8 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       if (!s) return invalid(ledger, "هاد السلعة ما بقاتش فالمخزون");
       if (!isLedgerId(m.id) || !m.id.startsWith("M-") || !Number.isInteger(m.delta) || !m.delta || !amount(m.delta)) return invalid(ledger, "الكمية غير صحيحة");
       if (!date(m.date) || !text(m.reason, 300) || !text(m.seller, 100)) return invalid(ledger, "معلومات غير صحيحة");
-      const sIn = m.serialsIn ?? [];
-      const sOut = m.serialsOut ?? [];
-      if (!serialList(sIn) || !serialList(sOut)) return invalid(ledger, "الأرقام التسلسلية (S/N) غير صحيحة");
-      if ((sIn.length || sOut.length) && m.delta !== sIn.length - sOut.length) return invalid(ledger, "الكمية ما كتوافقش عدد الـ S/N");
-      const taken = serialTaken(ledger, sIn);
-      if (taken) return invalid(ledger, `الـ S/N «${taken}» كاين ديجا فالمخزون`);
-      const missing = sOut.find((x) => !s.serials.some((y) => sameSerial(x, y)));
-      if (missing) return invalid(ledger, `الـ S/N «${missing}» ما كاينش فهاد السلعة`);
       // A difference, not a new total: counts from two phones add up instead of overwriting each other.
-      const serials = [...s.serials.filter((y) => !sOut.some((x) => sameSerial(x, y))), ...sIn.map((x) => x.trim())];
-      const next = { ...s, quantity: s.quantity + m.delta, serials, updatedAt: op.at };
+      const next = { ...s, quantity: s.quantity + m.delta, updatedAt: op.at };
       return { ledger: { ...ledger, stock: replace(ledger.stock, s.id, next), moves: [...ledger.moves, m] }, result: "ok" };
     }
     case "stock.delete": {
@@ -582,31 +546,15 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       } else if (purchases.length || lines.some((l) => l.type !== "كاش" || l.clientId || l.purchaseId)) {
         return invalid(ledger, "البيع كاش ما فيهش زبون");
       }
-      // Products from stock go out (unknown ones are simply not tracked), with their serial numbers.
+      // Products from stock go out (unknown ones are simply not tracked).
       const out = new Map<string, number>();
-      const soldSerials = new Map<string, string[]>();
-      for (const l of lines) {
-        if (!l.stockId || !ledger.stock.some((s) => s.id === l.stockId)) continue;
-        out.set(l.stockId, (out.get(l.stockId) ?? 0) + l.quantity);
-        if (l.serials?.length) soldSerials.set(l.stockId, [...(soldSerials.get(l.stockId) ?? []), ...l.serials]);
-      }
-      for (const [id, list] of soldSerials) {
-        const item = ledger.stock.find((s) => s.id === id)!;
-        const gone = list.find((x) => !item.serials.some((y) => sameSerial(x, y)));
-        // Sold on another phone in the meantime (or never in stock).
-        if (gone) return invalid(ledger, `الـ S/N «${gone}» ما بقاش فالمخزون (يمكن تباع)`);
-        if (new Set(list.map((x) => x.toLowerCase())).size !== list.length) return invalid(ledger, "نفس الـ S/N مرتين");
-      }
-      const stock = ledger.stock.map((s) => {
-        if (!out.has(s.id)) return s;
-        const sold = soldSerials.get(s.id) ?? [];
-        return { ...s, quantity: s.quantity - out.get(s.id)!, serials: s.serials.filter((y) => !sold.some((x) => sameSerial(x, y))), updatedAt: op.at };
-      });
+      for (const l of lines) if (l.stockId && ledger.stock.some((s) => s.id === l.stockId)) out.set(l.stockId, (out.get(l.stockId) ?? 0) + l.quantity);
+      const stock = ledger.stock.map((s) => (out.has(s.id) ? { ...s, quantity: s.quantity - out.get(s.id)!, updatedAt: op.at } : s));
       return {
         ledger: {
           ...ledger,
           stock,
-          sales: [...ledger.sales, ...lines.map((l) => ({ ...l, serials: l.serials ?? [], stockId: out.has(l.stockId) ? l.stockId : "", updatedAt: op.at }))],
+          sales: [...ledger.sales, ...lines.map((l) => ({ ...l, stockId: out.has(l.stockId) ? l.stockId : "", updatedAt: op.at }))],
           purchases: [...ledger.purchases, ...purchases.map((p) => ({ ...p, updatedAt: op.at }))],
         },
         result: "ok",
@@ -643,26 +591,9 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
 /** Cancelled sales give their products back to stock. */
 function restock(ledger: Ledger, sales: Sale[], at: string): Ledger {
   const back = new Map<string, number>();
-  const serials = new Map<string, string[]>();
-  for (const s of sales) {
-    if (!s.stockId) continue;
-    back.set(s.stockId, (back.get(s.stockId) ?? 0) + s.quantity);
-    if (s.serials?.length) serials.set(s.stockId, [...(serials.get(s.stockId) ?? []), ...s.serials]);
-  }
+  for (const s of sales) if (s.stockId) back.set(s.stockId, (back.get(s.stockId) ?? 0) + s.quantity);
   if (!back.size) return ledger;
-  return {
-    ...ledger,
-    stock: ledger.stock.map((x) => {
-      if (!back.has(x.id)) return x;
-      const returned = (serials.get(x.id) ?? []).filter((r) => !x.serials.some((y) => sameSerial(r, y)));
-      return { ...x, quantity: x.quantity + back.get(x.id)!, serials: [...x.serials, ...returned], updatedAt: at };
-    }),
-  };
-}
-
-/** A serial number already on a unit in stock (any product), if any. */
-function serialTaken(ledger: Ledger, list: string[]): string | undefined {
-  return list.find((x) => ledger.stock.some((s) => s.serials.some((y) => sameSerial(x, y))));
+  return { ...ledger, stock: ledger.stock.map((x) => (back.has(x.id) ? { ...x, quantity: x.quantity + back.get(x.id)!, updatedAt: at } : x)) };
 }
 
 /** A payment can only point to a purchase of the same customer. */

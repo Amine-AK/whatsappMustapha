@@ -60,14 +60,14 @@ export const HEADERS: Record<TableKey, string[]> = {
     "رقم الوصل", "رقم الزبون", "الزبون", "التاريخ", "الساعة", "المبلغ", "النوع", "رقم السلعة", "السلعة", "ملاحظات", "تاريخ الإضافة", "آخر تعديل",
   ],
   changes: ["رقم", "رقم الزبون", "الزبون", "التاريخ", "الطريطة القديمة", "الطريطة الجديدة", "المدة القديمة", "المدة الجديدة", "السبب", "تاريخ الإضافة"],
-  stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "الباركود / IMEI", "ملاحظات", "تاريخ الإضافة", "آخر تعديل", "الأرقام التسلسلية (S/N)"],
+  stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "الباركود / IMEI", "ملاحظات", "تاريخ الإضافة", "آخر تعديل"],
   categories: ["الفئة", "الوصف", "هامش الربح المستهدف %", "الأيقونة"],
   sales: [
     "رقم البيع", "رقم التيكي", "التاريخ", "الساعة", "السلعة", "الفئة", "رقم السلعة فالمخزون", "الكمية",
     "ثمن الشراء", "الثمن المقترح", "ثمن البيع", "الربح", "النوع", "رقم الزبون", "الزبون", "رقم العملية",
-    "البائع", "ملاحظات", "تاريخ الإضافة", "آخر تعديل", "الأرقام التسلسلية (S/N)",
+    "البائع", "ملاحظات", "تاريخ الإضافة", "آخر تعديل",
   ],
-  moves: ["رقم", "رقم السلعة", "السلعة", "التاريخ", "التغيير", "السبب", "البائع", "تاريخ الإضافة", "الأرقام التسلسلية (S/N)"],
+  moves: ["رقم", "رقم السلعة", "السلعة", "التاريخ", "التغيير", "السبب", "البائع", "تاريخ الإضافة"],
   closings: [
     "رقم", "التاريخ", "الساعة", "البائع", "مبيعات الكاش", "تسبيقات الكريدي", "دفعات الطريطات", "المصاريف",
     "تفاصيل المصاريف", "الصافي فالقجر (المتوقع)", "المبلغ المحسوب", "الفرق", "ملاحظات", "تاريخ الإضافة",
@@ -147,20 +147,8 @@ export function rowToChange(r: unknown[]): InstallmentChange | null {
   };
 }
 
-/** Serial numbers, one per line in the cell. */
-const list = (v: unknown) => s(v).split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-const joinList = (l: string[] | undefined) => (l ?? []).join("\n");
-
 /** Whole number that can be negative (parseSum drops the sign). */
 const int = (v: unknown) => Math.trunc(typeof v === "number" ? v : Number(s(v).replace(",", ".")) || 0);
-/** "+A\n−B" in the moves sheet: serial numbers in and out. */
-function movedSerials(cell: string): Pick<StockMove, "serialsIn" | "serialsOut"> {
-  const lines = cell.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-  const sIn = lines.filter((x) => x.startsWith("+")).map((x) => x.slice(1).trim());
-  const sOut = lines.filter((x) => x.startsWith("-") || x.startsWith("−")).map((x) => x.slice(1).trim());
-  return { ...(sIn.length ? { serialsIn: sIn } : {}), ...(sOut.length ? { serialsOut: sOut } : {}) };
-}
-
 /** Empty cell = unknown (null), anything else a number. */
 const nn = (v: unknown) => (s(v) === "" ? null : n(v));
 
@@ -179,7 +167,6 @@ export function rowToStock(r: unknown[]): StockItem | null {
     notes: s(r[8]),
     createdAt: s(r[9]),
     updatedAt: s(r[10]),
-    serials: list(r[11]),
   };
 }
 
@@ -210,14 +197,13 @@ export function rowToSale(r: unknown[]): Sale | null {
     notes: s(r[17]),
     createdAt: s(r[18]),
     updatedAt: s(r[19]),
-    serials: list(r[20]),
   };
 }
 
 export function rowToMove(r: unknown[]): StockMove | null {
   const id = s(r[0]);
   if (!id) return null;
-  return { id, stockId: s(r[1]), date: d(r[3]), delta: int(r[4]), reason: s(r[5]), seller: s(r[6]), createdAt: s(r[7]), ...movedSerials(s(r[8])) };
+  return { id, stockId: s(r[1]), date: d(r[3]), delta: int(r[4]), reason: s(r[5]), seller: s(r[6]), createdAt: s(r[7]) };
 }
 
 export function rowToClosing(r: unknown[]): CaisseClose | null {
@@ -297,7 +283,7 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
   const stock = new Map<string, Cell[]>(
     ledger.stock.map((x) => [
       x.id,
-      [x.id, x.item, x.category, x.condition, x.buyPrice, x.sellPrice, x.quantity, x.serial, x.notes, x.createdAt, x.updatedAt, joinList(x.serials)],
+      [x.id, x.item, x.category, x.condition, x.buyPrice, x.sellPrice, x.quantity, x.serial, x.notes, x.createdAt, x.updatedAt],
     ]),
   );
   const categories = new Map<string, Cell[]>(ledger.categories.map((c) => [c.name, [c.name, c.description, money(c.marginTarget), c.icon]]));
@@ -307,12 +293,12 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
       [
         x.id, x.ticket, x.date, x.time, x.item, x.category, x.stockId, x.quantity,
         x.buyPrice ?? "", x.listPrice, x.sellPrice, x.buyPrice === null ? "" : round2(x.sellPrice - x.buyPrice), x.type,
-        x.clientId, x.clientId ? (names.get(x.clientId) ?? "") : "", x.purchaseId, x.seller, x.notes, x.createdAt, x.updatedAt, joinList(x.serials),
+        x.clientId, x.clientId ? (names.get(x.clientId) ?? "") : "", x.purchaseId, x.seller, x.notes, x.createdAt, x.updatedAt,
       ],
     ]),
   );
   const moves = new Map<string, Cell[]>(
-    ledger.moves.map((m) => [m.id, [m.id, m.stockId, stockNames.get(m.stockId) ?? "", m.date, m.delta, m.reason, m.seller, m.createdAt, [...(m.serialsIn ?? []).map((x) => `+${x}`), ...(m.serialsOut ?? []).map((x) => `-${x}`)].join("\n")]]),
+    ledger.moves.map((m) => [m.id, [m.id, m.stockId, stockNames.get(m.stockId) ?? "", m.date, m.delta, m.reason, m.seller, m.createdAt]]),
   );
   const closings = new Map<string, Cell[]>(
     ledger.closings.map((k) => [

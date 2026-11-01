@@ -44,10 +44,7 @@ export function useScannerInput(onCode: (code: string) => void, container: RefOb
         }
         return;
       }
-      let ch = charFromCode(e.code, e.shiftKey) ?? (e.key.length === 1 ? e.key : null);
-      // Letters: the physical key says which one, the typed character says upper or lower case
-      // (some scanners send capitals without Shift).
-      if (ch && /^[a-z]$/i.test(ch) && e.key.length === 1 && /\p{L}/u.test(e.key)) ch = e.key === e.key.toUpperCase() ? ch.toUpperCase() : ch.toLowerCase();
+      const ch = charFromCode(e.code, e.shiftKey) ?? (e.key.length === 1 ? e.key : null);
       if (ch === null) return; // Shift and other keys pressed with the code
       if (now - last > SCAN_GAP_MS) buffer = "";
       buffer += ch;

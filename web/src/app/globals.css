@@ -846,22 +846,3 @@ a.btn { text-decoration: none; }
 }
 .delete-mini:hover:not(:disabled) { background: var(--danger); color: #fff; }
 .delete-mini:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* ---------------------------------------------------------------- serial numbers (S/N) */
-
-.field textarea, .code-row textarea {
-  width: 100%; min-height: 72px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px;
-  background: var(--surface); font: inherit; font-size: 15px; resize: vertical;
-}
-.code-row textarea { flex: 1; min-width: 0; }
-.field textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
-.serial-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.serial-chips li, .sn-chip {
-  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 8px;
-  background: var(--surface-2); border: 1px solid var(--line); font-size: 13px; font-family: ui-monospace, monospace;
-}
-.serial-pick { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 240px; overflow-y: auto; }
-.serial-pick .check { font-family: ui-monospace, monospace; }
-.sn-chip button { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 2px; font-size: 14px; }
-.cart-sn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.cart-sn select { min-height: 32px; padding: 2px 8px; border: 1px dashed var(--accent); border-radius: 8px; background: var(--surface); color: var(--accent); font-size: 13px; }
