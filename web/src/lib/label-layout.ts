@@ -31,10 +31,18 @@ export interface LabelSetup {
   /** Turns the text and barcode inside the sticker. */
   rotate: Rotation;
   mode: FeedMode;
-  /** Text size, % of normal. */
-  font: number;
+  /** What is printed, one line under the other, and how big (pt for text, mm for the barcode). */
   showShop: boolean;
+  shopSize: number;
   showItem: boolean;
+  itemSize: number;
+  priceSize: number;
+  priceBold: boolean;
+  barH: number;
+  /** The code's digits under the bars. */
+  showDigits: boolean;
+  /** Space between two lines (mm). */
+  lineGap: number;
 }
 
 /** A normal 80 mm receipt (ticket) printer with a roll of 50 × 40 mm stickers. */
@@ -51,9 +59,15 @@ export const RECEIPT_PRINTER: LabelSetup = {
   dy: 0,
   rotate: 0,
   mode: "strip",
-  font: 100,
-  showShop: true,
+  showShop: false,
+  shopSize: 6.5,
   showItem: true,
+  itemSize: 7,
+  priceSize: 14,
+  priceBold: true,
+  barH: 12,
+  showDigits: false,
+  lineGap: 1.5,
 };
 
 /** A label printer (HPRT N41…) that finds the gaps itself. */
@@ -61,7 +75,9 @@ export const LABEL_PRINTER: LabelSetup = { ...RECEIPT_PRINTER, gap: 0, mode: "pa
 
 export const DEFAULT_SETUP = RECEIPT_PRINTER;
 
-const LIMITS: Record<"w" | "h" | "gap" | "pageW" | "top" | "bottom" | "left" | "right" | "dx" | "dy" | "font", [number, number]> = {
+export type NumKey = "w" | "h" | "gap" | "pageW" | "top" | "bottom" | "left" | "right" | "dx" | "dy" | "shopSize" | "itemSize" | "priceSize" | "barH" | "lineGap";
+
+const LIMITS: Record<NumKey, [number, number]> = {
   w: [15, 110],
   h: [10, 150],
   gap: [0, 20],
@@ -72,7 +88,11 @@ const LIMITS: Record<"w" | "h" | "gap" | "pageW" | "top" | "bottom" | "left" | "
   right: [0, 30],
   dx: [-40, 60],
   dy: [-30, 30],
-  font: [50, 200],
+  shopSize: [4, 30],
+  itemSize: [4, 30],
+  priceSize: [4, 40],
+  barH: [4, 60],
+  lineGap: [0, 20],
 };
 
 export function clampField(key: keyof typeof LIMITS, v: unknown): number {
@@ -91,8 +111,9 @@ export function sanitizeSetup(raw: unknown): LabelSetup {
   }
   if ([0, 90, 180, 270].includes(r.rotate as number)) out.rotate = r.rotate as Rotation;
   if (r.mode === "strip" || r.mode === "pages") out.mode = r.mode;
-  if (typeof r.showShop === "boolean") out.showShop = r.showShop;
-  if (typeof r.showItem === "boolean") out.showItem = r.showItem;
+  for (const k of ["showShop", "showItem", "priceBold", "showDigits"] as const) {
+    if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
+  }
   // The margins must leave some room for the sticker's content.
   if (out.left + out.right > out.w - 10) out.left = out.right = 0;
   if (out.top + out.bottom > out.h - 8) out.top = out.bottom = 0;
@@ -154,12 +175,6 @@ export function barcodeFit(widthMm: number): { width: number; left: number } {
   const perModule = widthMm >= 38 ? 3 : 2;
   const width = Math.max(95 + 4, dots / perModule);
   return { width, left: round((width - 95) / 2) };
-}
-
-/** Text size factor: 1 for the 50 × 40 mm sticker, smaller / bigger for others. */
-export function textScale(s: LabelSetup): number {
-  const c = contentSize(s);
-  return round(Math.max(0.5, Math.min(1.6, Math.min(c.w / 50, c.h / 37.5))) * (s.font / 100), 3);
 }
 
 function round(n: number, digits = 2) {

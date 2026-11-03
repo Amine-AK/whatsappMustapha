@@ -12,6 +12,7 @@ import {
   RECEIPT_PRINTER,
   sanitizeSetup,
   type LabelSetup,
+  type NumKey,
   type Rotation,
 } from "@/lib/label-layout";
 
@@ -26,7 +27,12 @@ export function useLabelSetup(): [LabelSetup, (s: LabelSetup) => void] {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(KEY);
-      if (saved) return setS(sanitizeSetup(JSON.parse(saved)));
+      if (saved) {
+        const v = JSON.parse(saved);
+        // Saved before the line choices existed: start from the new default lines (no shop name).
+        if (v && !("showDigits" in v)) delete v.showShop;
+        return setS(sanitizeSetup(v));
+      }
       const size = localStorage.getItem(OLD_SIZE_KEY);
       const dims = size === "40x30" ? { w: 40, h: 30 } : size === "50x30" ? { w: 50, h: 30 } : {};
       const old = JSON.parse(localStorage.getItem(OLD_TEST_KEY) ?? "null");
@@ -74,10 +80,26 @@ const ROTATIONS: { value: Rotation; label: string }[] = [
   { value: 270, label: "270°" },
 ];
 
-type NumKey = "w" | "h" | "gap" | "pageW" | "top" | "bottom" | "left" | "right" | "dx" | "dy" | "font";
-
 /** The «⚙️ ضبط الطابعة» box: sizes, gap, margins, shift, and a calibration print. */
-export function LabelSetupPanel({ s, onChange, onCalibrate }: { s: LabelSetup; onChange: (s: LabelSetup) => void; onCalibrate: () => void }) {
+export function LabelSetupPanel({
+  s,
+  onChange,
+  onCalibrate,
+  showPrice,
+  onShowPrice,
+}: {
+  s: LabelSetup;
+  onChange: (s: LabelSetup) => void;
+  onCalibrate: () => void;
+  showPrice: boolean;
+  onShowPrice: (v: boolean) => void;
+}) {
+  const tick = (label: string, on: boolean, flip: (v: boolean) => void) => (
+    <label className="check">
+      <input type="checkbox" checked={on} onChange={(e) => flip(e.target.checked)} />
+      {label}
+    </label>
+  );
   const set = (k: NumKey, v: number) => onChange({ ...s, [k]: clampField(k, v) });
   const num = (k: NumKey, label: string, step: number, hint?: string, unit = "mm") => (
     <NumField key={k} k={k} id={`ls-${k}`} label={label} value={s[k]} step={step} unit={unit} hint={hint} onChange={(v) => set(k, v)} />
@@ -132,9 +154,31 @@ export function LabelSetupPanel({ s, onChange, onCalibrate }: { s: LabelSetup; o
       </fieldset>
 
       <fieldset className="setup-group">
-        <legend>🔤 المحتوى</legend>
+        <legend>✅ شنو نطبعو (من الفوق للتحت)</legend>
+        <div className="print-line">
+          {tick("سمية المحل", s.showShop, (v) => onChange({ ...s, showShop: v }))}
+          {s.showShop && num("shopSize", "الحجم", 0.5, undefined, "pt")}
+        </div>
+        <div className="print-line">
+          {tick("سمية السلعة", s.showItem, (v) => onChange({ ...s, showItem: v }))}
+          {s.showItem && num("itemSize", "الحجم", 0.5, undefined, "pt")}
+        </div>
+        <div className="print-line">
+          {tick("الثمن", showPrice, onShowPrice)}
+          {showPrice && num("priceSize", "الحجم", 0.5, undefined, "pt")}
+          {showPrice && tick("غليظ (bold)", s.priceBold, (v) => onChange({ ...s, priceBold: v }))}
+        </div>
+        <div className="print-line">
+          <span className="print-line-name">الباركود</span>
+          {num("barH", "الطول ديال الخطوط", 0.5)}
+          {tick("الأرقام تحت الباركود", s.showDigits, (v) => onChange({ ...s, showDigits: v }))}
+        </div>
+        <div className="setup-grid">{num("lineGap", "المسافة بين السطور", 0.5)}</div>
+      </fieldset>
+
+      <fieldset className="setup-group">
+        <legend>🔄 الدوران</legend>
         <div className="field">
-          <span>الدوران</span>
           <div className="segmented wide-seg" role="group" aria-label="الدوران">
             {ROTATIONS.map((r) => (
               <button key={r.value} type="button" className={s.rotate === r.value ? "on" : ""} aria-pressed={s.rotate === r.value} onClick={() => onChange({ ...s, rotate: r.value })}>
@@ -143,15 +187,6 @@ export function LabelSetupPanel({ s, onChange, onCalibrate }: { s: LabelSetup; o
             ))}
           </div>
         </div>
-        <div className="setup-grid">{num("font", "حجم الكتابة", 5, undefined, "%")}</div>
-        <label className="check">
-          <input type="checkbox" checked={s.showShop} onChange={(e) => onChange({ ...s, showShop: e.target.checked })} />
-          سمية المحل
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={s.showItem} onChange={(e) => onChange({ ...s, showItem: e.target.checked })} />
-          سمية السلعة
-        </label>
       </fieldset>
 
       <div className="setup-actions">

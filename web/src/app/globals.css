@@ -562,13 +562,14 @@ input[type="date"] { min-height: 44px; }
 .label.size-a4 .label-item { font-size: 9pt; }
 .label.size-a4 .label-price { font-size: 12pt; }
 
-/* A roll sticker fills the space inside its margins; text follows --k (sticker size × text size %). */
-.label.roll { width: 100%; height: 100%; --k: 1; }
-.label.roll .label-shop { font-size: calc(6.5pt * var(--k)); }
-.label.roll .label-item { font-size: calc(9.5pt * var(--k)); padding: 0 2mm; }
-.label.roll.short .label-item { -webkit-line-clamp: 1; }
-.label.roll .label-price { font-size: calc(14pt * var(--k)); }
-.label.roll .ean13 { flex: none; }
+/* A roll sticker fills the space inside its margins: the chosen lines centred, sizes and gap set in «ضبط الطابعة». */
+.label.roll { width: 100%; height: 100%; justify-content: center; }
+.label.roll .label-item { padding: 0 2mm; font-weight: 500; }
+.label.roll > * { flex: none; }
+.label-code { width: 100%; }
+.ean13-fixed { display: grid; width: 100%; }
+.ean13-fixed .ean13 { width: 100%; }
+.ean13-digits { font-family: monospace; font-size: 6.5pt; letter-spacing: 0.12em; margin: 0.3mm 0 0 !important; }
 
 /* One sticker in its place on the roll: a cell of (height + gap), see LabelSetup.tsx. */
 .label-cell { position: relative; overflow: hidden; background: #fff; }
@@ -592,6 +593,9 @@ input[type="date"] { min-height: 44px; }
 .num-row .btn { min-height: 38px; min-width: 38px; padding: 0; flex: none; }
 .num-row input { flex: 1; min-width: 0; width: 100%; min-height: 38px; text-align: center; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; }
 .num-unit { font-size: 12px; color: var(--muted); flex: none; }
+.print-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.print-line > :first-child { flex: 0 0 120px; font-weight: 600; font-size: 14px; }
+.print-line > .num-field { flex: 1 1 150px; }
 .setup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .setup-actions .btn:first-child { flex: 1; }
 .setup-help { font-size: 13px; }

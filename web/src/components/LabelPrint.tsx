@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ean13Modules, newShopCode, shopCodeOf, usedCodes } from "@/lib/barcode";
 import { money } from "@/lib/format";
-import { barcodeFit, contentSize, pageCss, pageGroups, textScale, type LabelSetup } from "@/lib/label-layout";
+import { barcodeFit, contentSize, pageCss, pageGroups, type LabelSetup } from "@/lib/label-layout";
 import { newLedgerId, nowParts, type StockItem } from "@/lib/ledger";
 import { SHOP } from "@/lib/receipt";
 import { currentSeller, searchStock } from "@/lib/shop";
@@ -208,6 +208,8 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
             )}
           </span>
         </div>
+        {/* On a roll, the price is chosen with the other lines in «ضبط الطابعة». */}
+        {!roll && (
         <label className="check">
           <input
             type="checkbox"
@@ -219,6 +221,7 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
           />
           نطبعو الثمن على الملصق
         </label>
+        )}
 
         {(labels[0] || roll) && (
           <div className="label-preview" aria-label="شكل الملصق">
@@ -226,7 +229,18 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
           </div>
         )}
 
-        {roll && <LabelSetupPanel s={setup} onChange={setSetup} onCalibrate={calibrate} />}
+        {roll && (
+          <LabelSetupPanel
+            s={setup}
+            onChange={setSetup}
+            onCalibrate={calibrate}
+            showPrice={showPrice}
+            onShowPrice={(v) => {
+              setShowPrice(v);
+              save(PRICE_KEY, v ? "yes" : "no");
+            }}
+          />
+        )}
 
         <label className="visually-hidden" htmlFor="label-search">
           قلب على سلعة
@@ -300,18 +314,32 @@ function Label({ item, code, showPrice }: { item: StockItem; code: string; showP
   );
 }
 
-/** A roll sticker, filling the space inside its margins; text sized to the sticker. */
+/** A roll sticker: the chosen lines, centred, with the chosen sizes and space between them. */
 function RollLabel({ item, code, setup, showPrice }: { item: StockItem; code: string; setup: LabelSetup; showPrice: boolean }) {
   const size = contentSize(setup);
   // The barcode spans the whole width, each bar a whole number of printer dots.
   const fit = barcodeFit(size.w);
-  const style = { "--k": textScale(setup) } as CSSProperties;
+  const pt = (n: number) => `${n}pt`;
   return (
-    <div className={`label roll${size.h < 32 ? " short" : ""}`} dir="rtl" lang="ar" style={style}>
-      {setup.showShop && <p className="label-shop">{SHOP.name}</p>}
-      {setup.showItem && <p className="label-item">{item.item}</p>}
-      {showPrice && <p className="label-price">{money(item.sellPrice)}</p>}
-      <Ean13 code={code} width={fit.width} left={fit.left} />
+    <div className="label roll" dir="rtl" lang="ar" style={{ gap: `${setup.lineGap}mm` }}>
+      {setup.showShop && (
+        <p className="label-shop" style={{ fontSize: pt(setup.shopSize) }}>
+          {SHOP.name}
+        </p>
+      )}
+      {setup.showItem && (
+        <p className="label-item" style={{ fontSize: pt(setup.itemSize) }}>
+          {item.item}
+        </p>
+      )}
+      {showPrice && (
+        <p className="label-price" style={{ fontSize: pt(setup.priceSize), fontWeight: setup.priceBold ? 800 : 400 }}>
+          {money(item.sellPrice)}
+        </p>
+      )}
+      <div className="label-code">
+        <Ean13 code={code} width={fit.width} left={fit.left} digits={setup.showDigits} barsMm={setup.barH} />
+      </div>
     </div>
   );
 }
@@ -321,7 +349,7 @@ function RollLabel({ item, code, setup, showPrice }: { item: StockItem; code: st
  * drawing in bar widths (modules) and `left` the white space before the bars;
  * by default 11 white modules on each side, as scanners like.
  */
-export function Ean13({ code, width = 95 + 22, left = 11 }: { code: string; width?: number; left?: number }) {
+export function Ean13({ code, width = 95 + 22, left = 11, digits = true, barsMm }: { code: string; width?: number; left?: number; digits?: boolean; barsMm?: number }) {
   const m = ean13Modules(code);
   const W = width;
   const bars: { x: number; w: number; guard: boolean }[] = [];
@@ -334,6 +362,24 @@ export function Ean13({ code, width = 95 + 22, left = 11 }: { code: string; widt
     while (m[j] === "1") j++;
     bars.push({ x: i + left, w: j - i, guard: i < 3 || (i >= 45 && i < 50) || i >= 92 });
     i = j;
+  }
+  // With a bar height in mm: bars stretched to that height, digits (if any) as text under them.
+  if (barsMm) {
+    return (
+      <div className="ean13-fixed">
+        <svg className="ean13" viewBox={`0 0 ${W} 30`} preserveAspectRatio="none" style={{ height: `${barsMm}mm` }} shapeRendering="crispEdges" role="img" aria-label={`باركود ${code}`}>
+          <rect width={W} height={30} fill="#fff" />
+          {bars.map((b) => (
+            <rect key={b.x} x={b.x} y={0} width={b.w} height={30} fill="#000" />
+          ))}
+        </svg>
+        {digits && (
+          <p className="ean13-digits" dir="ltr">
+            {code}
+          </p>
+        )}
+      </div>
+    );
   }
   return (
     <svg className="ean13" viewBox={`0 0 ${W} 42`} shapeRendering="crispEdges" role="img" aria-label={`باركود ${code}`}>

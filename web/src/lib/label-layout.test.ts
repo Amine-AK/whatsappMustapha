@@ -47,6 +47,12 @@ describe("sticker layout", () => {
     expect(sanitizeSetup({ top: 20, bottom: 20 }).top).toBe(0);
   });
 
+  it("keeps the chosen lines, sizes and spacing", () => {
+    const s = sanitizeSetup({ showShop: true, itemSize: 6, priceBold: false, showDigits: true, lineGap: 2.5, barH: 999 });
+    expect([s.showShop, s.itemSize, s.priceBold, s.showDigits, s.lineGap, s.barH]).toEqual([true, 6, false, true, 2.5, 60]);
+    expect([DEFAULT_SETUP.showShop, DEFAULT_SETUP.showDigits, DEFAULT_SETUP.priceBold]).toEqual([false, false, true]);
+  });
+
   it("draws barcode bars on whole printer dots", () => {
     expect(barcodeFit(50)).toEqual({ width: 400 / 3, left: 19.17 });
     expect(barcodeFit(30).width).toBe(120);

@@ -295,8 +295,9 @@ different suppliers carries one label with one name and one price.
   with the product's other codes (column «أكواد أخرى (موردين آخرين)») the first time you print,
   and stays the same at every reprint. Scanning it in **البيع** or **المخزون**
   finds the product like a supplier's code.
-- **Sticker:** shop name, product name, price (untick **نطبعو الثمن** to leave
-  it out), barcode and its digits.
+- **Sticker:** on a roll, the lines chosen in **ضبط الطابعة** (by default:
+  small product name, bold price, barcode without digits). On A4: shop name,
+  product name, price (untick **نطبعو الثمن** to leave it out), barcode and digits.
 - **Paper:** a roll of stickers (**50 × 40**, **40 × 30**, **50 × 30** in one tap,
   or any size typed in the setup) or an **A4** sheet of 24 stickers (3 × 8,
   70 × 37 mm). The barcode is drawn with each bar a whole number of dots of a
@@ -318,8 +319,11 @@ preview draws the sticker's edge (red dashes) and the space inside the margins.
   try 72 or 80 if the driver shrinks or cuts the sticker).
 - **الهوامش:** empty space inside the sticker: top (header), bottom (footer), right, left.
 - **التحريك:** moves the whole sticker right/left and down/up.
-- **المحتوى:** turn the content 0°/90°/180°/270° (e.g. a 40 × 50 roll fed
-  sideways), text size %, show the shop name and the product name.
+- **شنو نطبعو:** tick each line to print, top to bottom: shop name (off by
+  default), product name (7 pt, small), price (14 pt, **bold** on/off), the
+  barcode (bar height in mm, digits under it off by default), and the space
+  between lines (mm). On an A4 sheet the price is ticked in the window itself.
+- **الدوران:** turn the content 0°/90°/180°/270° (e.g. a 40 × 50 roll fed sideways).
 - **طبع 5 ديال التجربة بالإطار:** prints 5 stickers with their edges drawn,
   saves no barcode. Then:
   1. Each frame lower than the one before → lower **الفراغ** by 0.1; higher → raise it.
