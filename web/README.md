@@ -309,6 +309,23 @@ different suppliers carries one label with one name and one price.
      with the phone or USB scanner before printing a big batch.
 - After changing a price, print new stickers for the units on the shelf.
 
+### DEV ONLY: sticker print tests (to remove after testing)
+
+For the owner, the sticker window shows a dashed box **🧪 تجربة الطباعة** (40×30
+and 50×30 rolls only) to find the right settings for each printer:
+
+- **الاتجاه:** 0°, 90°, 180° or 270°. 90° and 270° also swap the page's width and
+  height, for printers that feed the label sideways.
+- **حجم الورقة:** «قد الملصق» sends the sticker size to the printer; «من الطابعة»
+  lets the size chosen in the printer driver decide.
+- **التحريك:** moves the sticker by 0.5 mm steps (↺ resets) when it prints off-center.
+- **طبع ملصق واحد للتجربة:** prints one sticker and saves no barcode.
+
+The choices are kept on that device. To remove: delete
+`src/components/PrintTest.tsx`, its imports and uses in `LabelPrint.tsx`
+(keep `.label-page`, it holds each roll sticker), the «print tests» CSS and
+this section.
+
 ## Working without internet
 
 After the app has been opened once with internet on a device, it also works
