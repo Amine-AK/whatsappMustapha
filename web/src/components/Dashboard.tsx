@@ -10,6 +10,7 @@ import { unpaidItems, type ClientSummary } from "@/lib/ledger";
 import { displayDate, installmentText } from "@/lib/receipt";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { ArchiveView } from "./ArchiveView";
+import { EyeButton, shown, useHiddenAmount } from "./HideAmount";
 import { BackupDialog } from "./BackupDialog";
 import { UsersDialog } from "./UsersDialog";
 import { DevResetDialog } from "./DevReset"; // DEV ONLY
@@ -105,6 +106,7 @@ export function Dashboard() {
   const [showFilters, setShowFilters] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [view, setViewState] = useState<View>("credit");
+  const [hideDebt, toggleDebt] = useHiddenAmount("credit-total");
 
   useEffect(() => {
     try {
@@ -293,8 +295,10 @@ export function Dashboard() {
         <section className="summary" aria-label="ملخص">
           {me?.role === "owner" && (
             <div className="stat">
-              <span className="stat-label">مجموع الكريدي</span>
-              <span className="stat-value">{money(summary.totalDebt)}</span>
+              <span className="stat-label">
+                مجموع الكريدي <EyeButton hidden={hideDebt} onToggle={toggleDebt} what="مجموع الكريدي" />
+              </span>
+              <span className="stat-value">{shown(hideDebt, money(summary.totalDebt))}</span>
               <span className="stat-sub">{summary.owing} زبون</span>
             </div>
           )}
