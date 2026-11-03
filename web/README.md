@@ -297,43 +297,48 @@ different suppliers carries one label with one name and one price.
   finds the product like a supplier's code.
 - **Sticker:** shop name, product name, price (untick **نطبعو الثمن** to leave
   it out), barcode and its digits.
-- **Paper:** a label printer roll of **50 × 40 mm** (the default), **40 × 30 mm**
-  or **50 × 30 mm** (one sticker per page), or an **A4** sheet of 24 stickers
-  (3 × 8, 70 × 37 mm). The app remembers the choice on that device. In the print
-  window choose the label size as the paper, **Margins: None** and **Scale: 100**.
-- **50 × 40 and 40 × 30 mm:** the barcode is drawn with each bar exactly 3 dots of a
+- **Paper:** a roll of stickers (**50 × 40**, **40 × 30**, **50 × 30** in one tap,
+  or any size typed in the setup) or an **A4** sheet of 24 stickers (3 × 8,
+  70 × 37 mm). The barcode is drawn with each bar a whole number of dots of a
   203 dpi printer, so it prints evenly on small stickers.
-- **50 × 40 or 40 × 50?** Choose 50×40 in the app either way. If the roll is
-  40 mm wide and 50 mm long (the sticker comes out sideways), set the driver's
-  paper to 40 × 50 mm and choose **90°** (or 270°) in the print test box.
-- **HPRT N41 (label printer, 203 dpi), once on the PC:**
-  1. Install the HPRT driver for the N41 from the HPRT website, and connect it by USB.
-  2. Load **direct thermal** 50 × 40 mm labels (no ribbon needed), then calibrate
-     so it finds the gaps (see the printer's manual; usually hold the feed button).
-  3. *Printers > HPRT N41 > Printing preferences*: paper **50 × 40 mm**, media
-     **labels with gaps**, orientation **portrait**. Start with darkness around
-     the middle and a slower speed, and raise the darkness if the bars are grey.
-  4. In the app's print window choose the N41, paper 50 × 40 mm, **Margins: None**,
-     **Scale: 100**, no headers and footers. Print 2–3 stickers and scan them
-     with the phone or USB scanner before printing a big batch.
 - After changing a price, print new stickers for the units on the shelf.
 
-### DEV ONLY: sticker print tests (to remove after testing)
+### ⚙️ ضبط الطابعة (printer setup)
 
-For the owner, the sticker window shows a dashed box **🧪 تجربة الطباعة** (40×30
-and 50×30 rolls only) to find the right settings for each printer:
+Under the preview, saved on each device (each PC has its own printer). The
+preview draws the sticker's edge (red dashes) and the space inside the margins.
 
-- **الاتجاه:** 0°, 90°, 180° or 270°. 90° and 270° also swap the page's width and
-  height, for printers that feed the label sideways.
-- **حجم الورقة:** «قد الملصق» sends the sticker size to the printer; «من الطابعة»
-  lets the size chosen in the printer driver decide.
-- **التحريك:** moves the sticker by 0.5 mm steps (↺ resets) when it prints off-center.
-- **طبع ملصق واحد للتجربة:** prints one sticker and saves no barcode.
+- **شنو هي الطابعة؟**
+  - **طابعة التيكي 80mm** (a normal receipt printer): it cannot see the gaps
+    between stickers, so the app places each sticker itself every
+    *height + gap* mm, all on one long page (cut in pages of at most 100 stickers).
+  - **طابعة الملصقات** (HPRT N41…): one page per sticker, the printer finds the gaps; gap 0.
+- **قد الملصق:** width, height, **الفراغ** (gap between two stickers, 0.1 mm
+  steps) and **عرض الورقة** (paper width sent to the printer; 0 = sticker width,
+  try 72 or 80 if the driver shrinks or cuts the sticker).
+- **الهوامش:** empty space inside the sticker: top (header), bottom (footer), right, left.
+- **التحريك:** moves the whole sticker right/left and down/up.
+- **المحتوى:** turn the content 0°/90°/180°/270° (e.g. a 40 × 50 roll fed
+  sideways), text size %, show the shop name and the product name.
+- **طبع 5 ديال التجربة بالإطار:** prints 5 stickers with their edges drawn,
+  saves no barcode. Then:
+  1. Each frame lower than the one before → lower **الفراغ** by 0.1; higher → raise it.
+  2. All frames off by the same amount → use **التحريك**.
+  3. Print window: **Margins: None**, **Scale: 100**, **Headers and footers** off.
+  4. Receipt printer driver (*Printing preferences*): turn off the automatic
+     cut and the paper feed after printing.
 
-The choices are kept on that device. To remove: delete
-`src/components/PrintTest.tsx`, its imports and uses in `LabelPrint.tsx`
-(keep `.label-page`, it holds each roll sticker), the «print tests» CSS and
-this section.
+### HPRT N41 (label printer, 203 dpi), once on the PC
+
+1. Install the HPRT driver for the N41 from the HPRT website, and connect it by USB.
+2. Load **direct thermal** 50 × 40 mm labels (no ribbon needed), then calibrate
+   so it finds the gaps (see the printer's manual; usually hold the feed button).
+3. *Printers > HPRT N41 > Printing preferences*: paper **50 × 40 mm**, media
+   **labels with gaps**, orientation **portrait**. Start with darkness around
+   the middle and a slower speed, and raise the darkness if the bars are grey.
+4. In the app choose **طابعة الملصقات**; in the print window choose the N41,
+   **Margins: None**, **Scale: 100**, no headers and footers. Print 2–3 stickers
+   and scan them with the phone or USB scanner before printing a big batch.
 
 ## Working without internet
 
