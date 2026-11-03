@@ -7,7 +7,7 @@
 // it in the Google Sheet), so both always agree. Operations are safe to send
 // twice: a second copy is recognised and skipped.
 
-import { addDays, addMonths, dueStatus, isISODate, isManualPeriod, nextDateForPeriod, type DueStatus } from "./sheet-logic";
+import { addDays, addMonths, addPeriods, dueStatus, isISODate, isManualPeriod, nextDateForPeriod, type DueStatus } from "./sheet-logic";
 
 export interface Client {
   id: string;
@@ -759,16 +759,22 @@ export function latestNextDue(client: Client, paidDate: string): string {
 }
 
 /**
- * Next due date after a payment made on `paidDate`: one period after the due
- * date that was set, so a late customer isn't given extra time (due 31/10,
- * paid 10/11, monthly → 30/11, not 10/12), but never later than one period
- * after the payment (see latestNextDue).
+ * Next due date after a payment made on `paidDate`: the next date on the
+ * customer's schedule (the due date that was set + one period, two…) that
+ * comes after the payment day. A late customer isn't given extra time (due
+ * 31/10, monthly, paid 10/11 → 30/11, not 10/12), the date is never before
+ * the payment day (due 31/08, paid 10/11 → 30/11), and never later than one
+ * period after the payment (see latestNextDue).
  */
 export function suggestNextDue(client: Client, paidDate: string): string {
   const latest = latestNextDue(client, paidDate);
   if (!latest) return client.nextDueDate;
-  const fromDue = client.nextDueDate ? nextDateForPeriod(client.period, client.nextDueDate) : "";
-  return fromDue && fromDue < latest ? fromDue : latest;
+  if (!client.nextDueDate) return latest;
+  for (let k = 1; k <= 1000; k++) {
+    const d = addPeriods(client.period, client.nextDueDate, k);
+    if (d > paidDate) return d < latest ? d : latest;
+  }
+  return latest;
 }
 
 export function nowParts(now = new Date()): { date: string; time: string } {

@@ -161,6 +161,13 @@ describe("next due date after a payment", () => {
     expect(suggestNextDue({ ...client, period: "سيمانة", nextDueDate: "2026-11-01" }, "2026-11-05")).toBe("2026-11-08");
   });
 
+  it("never before the payment day, even for a customer late by several periods", () => {
+    // Due 31/08, monthly, came on 10/11: 30/09 and 31/10 are already past → 30/11.
+    expect(suggestNextDue(monthly("2026-08-31"), "2026-11-10")).toBe("2026-11-30");
+    // Due 10/10, paid 10/11: 10/11 would be today → 10/12.
+    expect(suggestNextDue(monthly("2026-10-10"), "2026-11-10")).toBe("2026-12-10");
+  });
+
   it("no limit when the dates are set by hand", () => {
     const manual = { ...client, period: "", nextDueDate: "2027-03-01" };
     expect(latestNextDue(manual, "2026-11-10")).toBe("");
