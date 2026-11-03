@@ -1,30 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ean13Modules, newShopCode, shopCodeOf, usedCodes } from "@/lib/barcode";
 import { money } from "@/lib/format";
+import { barcodeFit, contentSize, pageCss, pageGroups, type LabelSetup } from "@/lib/label-layout";
 import { newLedgerId, nowParts, type StockItem } from "@/lib/ledger";
 import { SHOP } from "@/lib/receipt";
 import { currentSeller, searchStock } from "@/lib/shop";
 import { Modal } from "./Modal";
-// DEV ONLY (print tests): remove with PrintTest.tsx.
-import { pageRule, PrintTestPanel, TestPage, usePrintTest } from "./PrintTest";
+import { LabelCell, LabelSetupPanel, useLabelSetup } from "./LabelSetup";
 import type { LedgerState } from "./useLedger";
 
-type Size = "50x40" | "40x30" | "50x30" | "a4";
-const SIZES: { value: Size; label: string; hint: string; mm: string }[] = [
-  { value: "50x40", label: "50×40", hint: "رول ديال طابعة الملصقات (HPRT N41…)، إلا خرج مايل جرب 90° فالتجربة", mm: "50 × 40 mm" },
-  { value: "40x30", label: "40×30", hint: "رول ديال طابعة الملصقات", mm: "40 × 30 mm" },
-  { value: "50x30", label: "50×30", hint: "رول ديال طابعة الملصقات", mm: "50 × 30 mm" },
-  { value: "a4", label: "A4", hint: "ورقة A4 ديال 24 ملصق (3 × 8)", mm: "70 × 37 mm" },
+/** A roll of stickers (any size, set in «ضبط الطابعة») or an A4 sheet. */
+type Paper = "roll" | "a4";
+/** Roll sizes to pick in one tap (width × height, mm); any other size is typed in the setup. */
+const ROLLS: [number, number][] = [
+  [50, 40],
+  [40, 30],
+  [50, 30],
 ];
 const SIZE_KEY = "label-size";
 const PRICE_KEY = "label-price";
 const MAX_LABELS = 1000;
-/** Roll sizes in mm (width × height). */
-const ROLL: Partial<Record<Size, [number, number]>> = { "50x40": [50, 40], "40x30": [40, 30], "50x30": [50, 30] };
-// DEV ONLY: the sticker printed by «طبع ملصق واحد للتجربة» when no product is chosen.
+const CALIBRATION_COUNT = 5;
+// The sticker printed by the calibration print when no product is chosen.
 const SAMPLE = { id: "TEST", item: "تجربة الطباعة 123", sellPrice: 99.5 } as StockItem;
 
 /**
@@ -36,18 +36,17 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const [query, setQuery] = useState("");
   // Product id → number of labels.
   const [counts, setCounts] = useState<Record<string, number>>(() => (preselect ? { [preselect.id]: Math.max(1, preselect.quantity) } : {}));
-  const [size, setSize] = useState<Size>("50x40");
+  const [paper, setPaper] = useState<Paper>("roll");
   const [showPrice, setShowPrice] = useState(true);
   const [mounted, setMounted] = useState(false);
-  // DEV ONLY: orientation / position tests.
-  const [test, setTest] = usePrintTest();
-  const [testOnly, setTestOnly] = useState(false);
-  const roll = ROLL[size];
+  const [setup, setSetup] = useLabelSetup();
+  // Calibration print: a few stickers with their edges drawn, nothing saved.
+  const [calibrating, setCalibrating] = useState(false);
+  const roll = paper === "roll";
 
   useEffect(() => {
     try {
-      const s = localStorage.getItem(SIZE_KEY);
-      if (s === "50x40" || s === "40x30" || s === "a4" || s === "50x30") setSize(s);
+      if (localStorage.getItem(SIZE_KEY) === "a4") setPaper("a4");
       setShowPrice(localStorage.getItem(PRICE_KEY) !== "no");
     } catch {}
     setMounted(true);
@@ -83,26 +82,40 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const total = chosen.reduce((t, s) => t + counts[s.id], 0);
   const labels = chosen.flatMap((s) => Array.from({ length: counts[s.id] }, () => s));
   const codeOf = (s: StockItem) => codes.get(s.id)?.code ?? newShopCode(s.id, new Set());
-  // DEV ONLY: a test print is one sticker, nothing saved.
-  const printed = testOnly ? [labels[0] ?? stock[0] ?? SAMPLE] : labels;
+  const printed = calibrating ? Array.from({ length: CALIBRATION_COUNT }, () => labels[0] ?? stock[0] ?? SAMPLE) : labels;
+  const groups = roll ? pageGroups(setup, printed.length) : [];
 
-  function testPrint() {
-    setTestOnly(true);
-    window.addEventListener("afterprint", () => setTestOnly(false), { once: true });
+  function calibrate() {
+    setCalibrating(true);
+    window.addEventListener("afterprint", () => setCalibrating(false), { once: true });
     setTimeout(() => window.print(), 50);
   }
 
-  /** A sticker as it is printed: on a roll, in its own page, turned and shifted as set in the tests. */
-  const onPage = (s: StockItem, key?: number) => {
-    const label = <Label key={roll ? undefined : key} item={s} code={codeOf(s)} size={size} showPrice={showPrice} />;
-    return roll ? (
-      <TestPage key={key} w={roll[0]} h={roll[1]} t={test}>
-        {label}
-      </TestPage>
+  /** A sticker in its place on the roll (shifted, inside its margins, turned), or an A4 sticker. */
+  const placed = (s: StockItem, key: number, frame?: boolean) =>
+    roll ? (
+      <LabelCell key={key} s={setup} frame={frame}>
+        <RollLabel item={s} code={codeOf(s)} setup={setup} showPrice={showPrice} />
+      </LabelCell>
     ) : (
-      label
+      <Label key={key} item={s} code={codeOf(s)} showPrice={showPrice} />
     );
-  };
+
+  /** The stickers as printed: on a roll, N per page (strip) or one per page. */
+  function printPages() {
+    if (!roll) return printed.map((s, i) => placed(s, i));
+    let at = 0;
+    return groups.map((n, g) => {
+      const last = g === groups.length - 1 && n !== groups[0];
+      const sheet = (
+        <div key={g} className="label-sheet" style={last ? ({ page: "lbl-last" } as CSSProperties) : undefined}>
+          {printed.slice(at, at + n).map((s, i) => placed(s, at + i, calibrating))}
+        </div>
+      );
+      at += n;
+      return sheet;
+    });
+  }
 
   const setCount = (id: string, n: number) => setCounts((c) => ({ ...c, [id]: Math.max(0, Math.min(500, Math.floor(n) || 0)) }));
 
@@ -151,25 +164,52 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
         <div className="field">
           <span>نوع الورق</span>
           <div className="segmented wide-seg" role="group" aria-label="نوع الورق">
-            {SIZES.map((s) => (
-              <button
-                key={s.value}
-                type="button"
-                className={size === s.value ? "on" : ""}
-                aria-pressed={size === s.value}
-                onClick={() => {
-                  setSize(s.value);
-                  save(SIZE_KEY, s.value);
-                }}
-              >
-                <bdi dir="ltr">{s.label}</bdi>
-              </button>
-            ))}
+            {ROLLS.map(([w, h]) => {
+              const on = roll && setup.w === w && setup.h === h;
+              return (
+                <button
+                  key={`${w}x${h}`}
+                  type="button"
+                  className={on ? "on" : ""}
+                  aria-pressed={on}
+                  onClick={() => {
+                    setPaper("roll");
+                    save(SIZE_KEY, "roll");
+                    setSetup({ ...setup, w, h });
+                  }}
+                >
+                  <bdi dir="ltr">
+                    {w}×{h}
+                  </bdi>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              className={!roll ? "on" : ""}
+              aria-pressed={!roll}
+              onClick={() => {
+                setPaper("a4");
+                save(SIZE_KEY, "a4");
+              }}
+            >
+              A4
+            </button>
           </div>
           <span className="field-hint">
-            {SIZES.find((s) => s.value === size)!.hint} · <bdi dir="ltr">{SIZES.find((s) => s.value === size)!.mm}</bdi>
+            {roll ? (
+              <>
+                رول ملصقات · <bdi dir="ltr">{setup.w} × {setup.h} mm</bdi> · فراغ <bdi dir="ltr">{setup.gap} mm</bdi> · قد آخر؟ بدلو فـ«ضبط الطابعة»
+              </>
+            ) : (
+              <>
+                ورقة A4 ديال 24 ملصق (3 × 8) · <bdi dir="ltr">70 × 37 mm</bdi>
+              </>
+            )}
           </span>
         </div>
+        {/* On a roll, the price is chosen with the other lines in «ضبط الطابعة». */}
+        {!roll && (
         <label className="check">
           <input
             type="checkbox"
@@ -181,14 +221,26 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
           />
           نطبعو الثمن على الملصق
         </label>
+        )}
 
-        {(labels[0] || (roll && data.me?.role === "owner")) && (
+        {(labels[0] || roll) && (
           <div className="label-preview" aria-label="شكل الملصق">
-            {onPage(labels[0] ?? stock[0] ?? SAMPLE)}
+            {placed(labels[0] ?? stock[0] ?? SAMPLE, 0, true)}
           </div>
         )}
 
-        {roll && data.me?.role === "owner" && <PrintTestPanel t={test} onChange={setTest} onTestPrint={testPrint} />}
+        {roll && (
+          <LabelSetupPanel
+            s={setup}
+            onChange={setSetup}
+            onCalibrate={calibrate}
+            showPrice={showPrice}
+            onShowPrice={(v) => {
+              setShowPrice(v);
+              save(PRICE_KEY, v ? "yes" : "no");
+            }}
+          />
+        )}
 
         <label className="visually-hidden" htmlFor="label-search">
           قلب على سلعة
@@ -240,9 +292,9 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
       </Modal>
       {mounted &&
         createPortal(
-          <div id="print-root" className={`labels-print size-${size}`}>
-            <style>{roll ? pageRule(roll[0], roll[1], test) : "@page { size: A4; margin: 10mm 0 0 0; }"}</style>
-            {printed.map((s, i) => onPage(s, i))}
+          <div id="print-root" className={`labels-print ${roll ? "roll" : "size-a4"}`}>
+            <style>{roll ? pageCss(setup, groups) : "@page { size: A4; margin: 10mm 0 0 0; }"}</style>
+            {printPages()}
           </div>,
           document.body,
         )}
@@ -250,21 +302,44 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   );
 }
 
-function Label({ item, code, size, showPrice }: { item: StockItem; code: string; size: Size; showPrice: boolean }) {
+/** A sticker of an A4 sheet (70 × 37 mm). */
+function Label({ item, code, showPrice }: { item: StockItem; code: string; showPrice: boolean }) {
   return (
-    <div className={`label size-${size}`} dir="rtl" lang="ar">
+    <div className="label size-a4" dir="rtl" lang="ar">
       <p className="label-shop">{SHOP.name}</p>
       <p className="label-item">{item.item}</p>
       {showPrice && <p className="label-price">{money(item.sellPrice)}</p>}
-      {/* 40 mm wide at 203 dpi: each bar exactly 3 printer dots (0.375 mm), so all bars print the same width. */}
-      {size === "40x30" ? (
-        <Ean13 code={code} width={320 / 3} left={6} />
-      ) : size === "50x40" ? (
-        // 50 mm = 400 dots at 203 dpi: bars of 3 dots, 19 white modules before them.
-        <Ean13 code={code} width={400 / 3} left={19} />
-      ) : (
-        <Ean13 code={code} />
+      <Ean13 code={code} />
+    </div>
+  );
+}
+
+/** A roll sticker: the chosen lines, centred, with the chosen sizes and space between them. */
+function RollLabel({ item, code, setup, showPrice }: { item: StockItem; code: string; setup: LabelSetup; showPrice: boolean }) {
+  const size = contentSize(setup);
+  // The barcode spans the whole width, each bar a whole number of printer dots.
+  const fit = barcodeFit(size.w);
+  const pt = (n: number) => `${n}pt`;
+  return (
+    <div className="label roll" dir="rtl" lang="ar" style={{ gap: `${setup.lineGap}mm` }}>
+      {setup.showShop && (
+        <p className="label-shop" style={{ fontSize: pt(setup.shopSize) }}>
+          {SHOP.name}
+        </p>
       )}
+      {setup.showItem && (
+        <p className="label-item" style={{ fontSize: pt(setup.itemSize) }}>
+          {item.item}
+        </p>
+      )}
+      {showPrice && (
+        <p className="label-price" style={{ fontSize: pt(setup.priceSize), fontWeight: setup.priceBold ? 800 : 400 }}>
+          {money(item.sellPrice)}
+        </p>
+      )}
+      <div className="label-code">
+        <Ean13 code={code} width={fit.width} left={fit.left} digits={setup.showDigits} barsMm={setup.barH} />
+      </div>
     </div>
   );
 }
@@ -274,7 +349,7 @@ function Label({ item, code, size, showPrice }: { item: StockItem; code: string;
  * drawing in bar widths (modules) and `left` the white space before the bars;
  * by default 11 white modules on each side, as scanners like.
  */
-export function Ean13({ code, width = 95 + 22, left = 11 }: { code: string; width?: number; left?: number }) {
+export function Ean13({ code, width = 95 + 22, left = 11, digits = true, barsMm }: { code: string; width?: number; left?: number; digits?: boolean; barsMm?: number }) {
   const m = ean13Modules(code);
   const W = width;
   const bars: { x: number; w: number; guard: boolean }[] = [];
@@ -287,6 +362,24 @@ export function Ean13({ code, width = 95 + 22, left = 11 }: { code: string; widt
     while (m[j] === "1") j++;
     bars.push({ x: i + left, w: j - i, guard: i < 3 || (i >= 45 && i < 50) || i >= 92 });
     i = j;
+  }
+  // With a bar height in mm: bars stretched to that height, digits (if any) as text under them.
+  if (barsMm) {
+    return (
+      <div className="ean13-fixed">
+        <svg className="ean13" viewBox={`0 0 ${W} 30`} preserveAspectRatio="none" style={{ height: `${barsMm}mm` }} shapeRendering="crispEdges" role="img" aria-label={`باركود ${code}`}>
+          <rect width={W} height={30} fill="#fff" />
+          {bars.map((b) => (
+            <rect key={b.x} x={b.x} y={0} width={b.w} height={30} fill="#000" />
+          ))}
+        </svg>
+        {digits && (
+          <p className="ean13-digits" dir="ltr">
+            {code}
+          </p>
+        )}
+      </div>
+    );
   }
   return (
     <svg className="ean13" viewBox={`0 0 ${W} 42`} shapeRendering="crispEdges" role="img" aria-label={`باركود ${code}`}>

@@ -558,38 +558,53 @@ input[type="date"] { min-height: 44px; }
 .label-item { font-size: 8pt; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .label-price { font-size: 11pt; font-weight: 800; }
 .label .ean13 { display: block; width: 100%; height: auto; }
-.label.size-50x30 { width: 50mm; height: 30mm; padding: 1.2mm 2mm; }
-/* 40×30: the barcode spans the full 40 mm (see LabelPrint), so no side padding. */
-/* 50×40: full-width barcode (see LabelPrint), more room for the name and price. */
-.label.size-50x40 { width: 50mm; height: 40mm; padding: 1.5mm 0 1mm; }
-.label.size-50x40 .label-shop { font-size: 6.5pt; }
-.label.size-50x40 .label-item { font-size: 9.5pt; padding: 0 2mm; }
-.label.size-50x40 .label-price { font-size: 14pt; }
-.label.size-40x30 { width: 40mm; height: 30mm; padding: 1mm 0 0.6mm; }
-.label.size-40x30 .label-shop { font-size: 5.5pt; }
-.label.size-40x30 .label-item { font-size: 7.5pt; -webkit-line-clamp: 1; padding: 0 1.5mm; }
-.label.size-40x30 .label-price { font-size: 10pt; }
 .label.size-a4 { width: 70mm; height: 37mm; padding: 2mm 5mm; }
 .label.size-a4 .label-item { font-size: 9pt; }
 .label.size-a4 .label-price { font-size: 12pt; }
 
-/* A roll sticker in its own page box (turned / shifted by the DEV ONLY print tests). */
-.label-page { position: relative; overflow: hidden; background: #fff; }
-.label-page-inner { position: absolute; left: 50%; top: 50%; }
-.label-preview .label-page { box-shadow: 0 2px 10px rgb(0 0 0 / 18%); }
-.label-preview .label-page .label { box-shadow: none; }
+/* A roll sticker fills the space inside its margins: the chosen lines centred, sizes and gap set in «ضبط الطابعة». */
+.label.roll { width: 100%; height: 100%; justify-content: center; }
+.label.roll .label-item { padding: 0 2mm; font-weight: 500; }
+.label.roll > * { flex: none; }
+.label-code { width: 100%; }
+.ean13-fixed { display: grid; width: 100%; }
+.ean13-fixed .ean13 { width: 100%; }
+.ean13-digits { font-family: monospace; font-size: 6.5pt; letter-spacing: 0.12em; margin: 0.3mm 0 0 !important; }
 
-/* DEV ONLY: print tests box. Remove with PrintTest.tsx. */
-.print-test { display: grid; gap: 10px; padding: 10px 12px; border: 1px dashed var(--warn); border-radius: 10px; margin: 0; }
-.print-test legend { font-size: 14px; font-weight: 700; color: var(--warn); padding: 0 4px; }
-.print-test-shift { display: grid; gap: 6px; font-size: 14px; }
-.print-test-arrows { display: flex; gap: 6px; }
-.print-test-arrows .btn { flex: 1; min-height: 40px; padding: 0; }
+/* One sticker in its place on the roll: a cell of (height + gap), see LabelSetup.tsx. */
+.label-cell { position: relative; overflow: hidden; background: #fff; }
+.label-content { position: absolute; }
+.label-turn { position: absolute; left: 50%; top: 50%; }
+.label-frame { position: absolute; box-sizing: border-box; border: 0.25mm dashed #000; border-radius: 1.5mm; }
+.label-content.framed { outline: 0.2mm dotted #888; }
+.label-preview .label-cell { box-shadow: 0 2px 10px rgb(0 0 0 / 18%); }
+.label-preview .label-frame { border-color: #c33; }
+.label-preview .label-content.framed { background: rgb(0 120 255 / 4%); }
+
+/* «⚙️ ضبط الطابعة» */
+.label-setup { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.label-setup > summary { font-weight: 700; cursor: pointer; font-size: 15px; }
+.label-setup > * + * { margin-top: 10px; }
+.setup-group { display: grid; gap: 8px; margin: 0; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.setup-group legend { font-size: 14px; font-weight: 600; padding: 0 4px; }
+.setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.num-field label { font-size: 13px; }
+.num-row { display: flex; align-items: center; gap: 4px; }
+.num-row .btn { min-height: 38px; min-width: 38px; padding: 0; flex: none; }
+.num-row input { flex: 1; min-width: 0; width: 100%; min-height: 38px; text-align: center; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: inherit; }
+.num-unit { font-size: 12px; color: var(--muted); flex: none; }
+.print-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.print-line > :first-child { flex: 0 0 120px; font-weight: 600; font-size: 14px; }
+.print-line > .num-field { flex: 1 1 150px; }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.setup-actions .btn:first-child { flex: 1; }
+.setup-help { font-size: 13px; }
 
 @media print {
-  /* Rolls: one sticker per page. A4: a 3×8 grid. */
-  .labels-print .label-page { break-after: page; page-break-after: always; }
-  .labels-print .label-page:last-child { break-after: auto; page-break-after: auto; }
+  /* Roll: each sheet is one printed page holding its stickers one under the other. */
+  .labels-print.roll .label-sheet { break-after: page; page-break-after: always; }
+  .labels-print.roll .label-sheet:last-child { break-after: auto; page-break-after: auto; }
+  .labels-print.roll .label-cell { break-inside: avoid; }
   #print-root.labels-print.size-a4 { display: grid; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37mm; }
   .labels-print.size-a4 .label { break-after: auto; page-break-after: auto; break-inside: avoid; }
 }
