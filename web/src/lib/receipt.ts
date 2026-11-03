@@ -93,6 +93,30 @@ export interface Statement {
   remaining: number;
   installment: string;
   nextDueDate: string;
+  /** Everything, for the WhatsApp summary: each purchase with the payments made for it. */
+  detail: {
+    items: {
+      date: string;
+      item: string;
+      price: number;
+      notes: string;
+      /** Paid on it in all, including its share of the general payments. */
+      paid: number;
+      remaining: number;
+      payments: StatementPayment[];
+    }[];
+    /** Payments not made for one item: they pay the oldest items first. */
+    general: StatementPayment[];
+    paymentsCount: number;
+  };
+}
+
+export interface StatementPayment {
+  /** "dd/mm/yyyy - HH:mm" */
+  when: string;
+  amount: number;
+  kind: string;
+  notes: string;
 }
 
 /** The whole account. `lastPayments` limits how many payments are listed (0 = all). */
@@ -114,8 +138,23 @@ export function statement(s: ClientSummary, printedAt: string, lastPayments = 0)
     remaining: Math.max(0, s.remaining),
     installment: s.remaining > 0 ? installmentText(s) : "",
     nextDueDate: s.remaining > 0 ? s.client.nextDueDate : "",
+    detail: {
+      items: s.items.map((i) => ({
+        date: displayDate(i.purchase.date),
+        item: i.purchase.item,
+        price: i.purchase.price,
+        notes: i.purchase.notes.trim(),
+        paid: i.paid,
+        remaining: i.remaining,
+        payments: ordered.filter((p) => p.purchaseId === i.purchase.id).map(statementPayment),
+      })),
+      general: ordered.filter((p) => !p.purchaseId || !s.items.some((i) => i.purchase.id === p.purchaseId)).map(statementPayment),
+      paymentsCount: ordered.length,
+    },
   };
 }
+
+const statementPayment = (p: Payment): StatementPayment => ({ when: displayDateTime(p.date, p.time), amount: p.amount, kind: p.kind, notes: p.notes.trim() });
 
 // ---------------------------------------------------------------- WhatsApp (sent by hand)
 // Standard emojis that every WhatsApp shows; *text* is bold in WhatsApp.
@@ -145,17 +184,47 @@ export function paymentMessage(r: PaymentReceipt): string {
   return lines.join("\n");
 }
 
-/** Account summary to send on WhatsApp. */
+/**
+ * The whole account to send on WhatsApp, with every detail: each purchase
+ * (date, price) and every amount paid for it with its date and time.
+ */
 export function statementMessage(st: Statement): string {
-  const lines = [`السلام عليكم ${st.customer} 👋`, `📋 هادا هو الحساب ديالكم عند ${SHOP.name}:`, "", "🛒 المشتريات:"];
-  for (const i of st.items) lines.push(`▪️ ${i.date} ${i.item}: ${money(i.price)}${i.remaining > 0 ? ` (باقي ${money(i.remaining)})` : " ✅"}`);
-  lines.push("", `💰 المجموع: ${money(st.total)}`, `💵 المدفوع: ${money(st.paid)}`);
+  const d = st.detail;
+  const line = "━━━━━━━━━━━━";
+  const pay = (p: StatementPayment) =>
+    `   ▪️ ${p.when} · ${p.kind}: *${money(p.amount)}*${p.notes ? ` (${p.notes})` : ""}`;
+  const lines = [`السلام عليكم ${st.customer} 👋`, `📋 الحساب الكامل ديالكم عند ${SHOP.name}`, `🕒 ${st.printedAt}`];
+
+  d.items.forEach((i, n) => {
+    lines.push(line, `🛒 *${n + 1}. ${i.item}*`, `📅 تاريخ الشرا: ${i.date}`, `💰 الثمن: ${money(i.price)}`);
+    if (i.notes) lines.push(`📝 ${i.notes}`);
+    if (i.payments.length) {
+      lines.push("💵 الدفعات ديالها:");
+      for (const p of i.payments) lines.push(pay(p));
+    }
+    const own = i.payments.reduce((t, p) => t + p.amount, 0);
+    const fromGeneral = Math.round((i.paid - own) * 100) / 100;
+    if (fromGeneral > 0) lines.push(`   ▪️ من الدفعات العامة: ${money(fromGeneral)}`);
+    lines.push(i.remaining > 0 ? `✔️ تخلص منها: ${money(i.paid)} · ⏳ باقي: *${money(i.remaining)}*` : `✅ خالصة (${money(i.paid)})`);
+  });
+
+  if (d.general.length) {
+    lines.push(line, "💵 *دفعات عامة* (كتنقص من السلع القدام الأولين):");
+    for (const p of d.general) lines.push(pay(p));
+  }
+
+  lines.push(
+    line,
+    "📊 *الملخص*",
+    `🛒 السلع: ${d.items.length} · المجموع: ${money(st.total)}`,
+    `💵 المدفوع: ${money(st.paid)} (${d.paymentsCount} ${d.paymentsCount === 1 ? "دفعة" : "دفعات"})`,
+  );
   if (st.remaining > 0) {
     lines.push(`⏳ المتبقي: *${money(st.remaining)}*`);
     if (st.nextDueDate) lines.push(`📅 الدفعة المقبلة: ${displayDate(st.nextDueDate)}`);
     if (st.installment) lines.push(`🔁 الطريطة: ${st.installment}`);
   } else {
-    lines.push("🎉 الحساب خالص.");
+    lines.push("🎉 الحساب ديالكم خالص. بارك الله فيكم.");
   }
   lines.push("", `🏪 ${SHOP.name}`, `📞 ${SHOP.phone}`);
   return lines.join("\n");
