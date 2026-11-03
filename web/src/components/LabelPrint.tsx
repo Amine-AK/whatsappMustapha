@@ -12,9 +12,10 @@ import { Modal } from "./Modal";
 import { pageRule, PrintTestPanel, TestPage, usePrintTest } from "./PrintTest";
 import type { LedgerState } from "./useLedger";
 
-type Size = "40x30" | "50x30" | "a4";
+type Size = "50x40" | "40x30" | "50x30" | "a4";
 const SIZES: { value: Size; label: string; hint: string; mm: string }[] = [
-  { value: "40x30", label: "40×30", hint: "رول ديال طابعة الملصقات (HPRT N41…)", mm: "40 × 30 mm" },
+  { value: "50x40", label: "50×40", hint: "رول ديال طابعة الملصقات (HPRT N41…)، إلا خرج مايل جرب 90° فالتجربة", mm: "50 × 40 mm" },
+  { value: "40x30", label: "40×30", hint: "رول ديال طابعة الملصقات", mm: "40 × 30 mm" },
   { value: "50x30", label: "50×30", hint: "رول ديال طابعة الملصقات", mm: "50 × 30 mm" },
   { value: "a4", label: "A4", hint: "ورقة A4 ديال 24 ملصق (3 × 8)", mm: "70 × 37 mm" },
 ];
@@ -22,7 +23,7 @@ const SIZE_KEY = "label-size";
 const PRICE_KEY = "label-price";
 const MAX_LABELS = 1000;
 /** Roll sizes in mm (width × height). */
-const ROLL: Partial<Record<Size, [number, number]>> = { "40x30": [40, 30], "50x30": [50, 30] };
+const ROLL: Partial<Record<Size, [number, number]>> = { "50x40": [50, 40], "40x30": [40, 30], "50x30": [50, 30] };
 // DEV ONLY: the sticker printed by «طبع ملصق واحد للتجربة» when no product is chosen.
 const SAMPLE = { id: "TEST", item: "تجربة الطباعة 123", sellPrice: 99.5 } as StockItem;
 
@@ -35,7 +36,7 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const [query, setQuery] = useState("");
   // Product id → number of labels.
   const [counts, setCounts] = useState<Record<string, number>>(() => (preselect ? { [preselect.id]: Math.max(1, preselect.quantity) } : {}));
-  const [size, setSize] = useState<Size>("40x30");
+  const [size, setSize] = useState<Size>("50x40");
   const [showPrice, setShowPrice] = useState(true);
   const [mounted, setMounted] = useState(false);
   // DEV ONLY: orientation / position tests.
@@ -46,7 +47,7 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   useEffect(() => {
     try {
       const s = localStorage.getItem(SIZE_KEY);
-      if (s === "40x30" || s === "a4" || s === "50x30") setSize(s);
+      if (s === "50x40" || s === "40x30" || s === "a4" || s === "50x30") setSize(s);
       setShowPrice(localStorage.getItem(PRICE_KEY) !== "no");
     } catch {}
     setMounted(true);
@@ -256,7 +257,14 @@ function Label({ item, code, size, showPrice }: { item: StockItem; code: string;
       <p className="label-item">{item.item}</p>
       {showPrice && <p className="label-price">{money(item.sellPrice)}</p>}
       {/* 40 mm wide at 203 dpi: each bar exactly 3 printer dots (0.375 mm), so all bars print the same width. */}
-      {size === "40x30" ? <Ean13 code={code} width={320 / 3} left={6} /> : <Ean13 code={code} />}
+      {size === "40x30" ? (
+        <Ean13 code={code} width={320 / 3} left={6} />
+      ) : size === "50x40" ? (
+        // 50 mm = 400 dots at 203 dpi: bars of 3 dots, 19 white modules before them.
+        <Ean13 code={code} width={400 / 3} left={19} />
+      ) : (
+        <Ean13 code={code} />
+      )}
     </div>
   );
 }

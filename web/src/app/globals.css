@@ -560,6 +560,11 @@ input[type="date"] { min-height: 44px; }
 .label .ean13 { display: block; width: 100%; height: auto; }
 .label.size-50x30 { width: 50mm; height: 30mm; padding: 1.2mm 2mm; }
 /* 40×30: the barcode spans the full 40 mm (see LabelPrint), so no side padding. */
+/* 50×40: full-width barcode (see LabelPrint), more room for the name and price. */
+.label.size-50x40 { width: 50mm; height: 40mm; padding: 1.5mm 0 1mm; }
+.label.size-50x40 .label-shop { font-size: 6.5pt; }
+.label.size-50x40 .label-item { font-size: 9.5pt; padding: 0 2mm; }
+.label.size-50x40 .label-price { font-size: 14pt; }
 .label.size-40x30 { width: 40mm; height: 30mm; padding: 1mm 0 0.6mm; }
 .label.size-40x30 .label-shop { font-size: 5.5pt; }
 .label.size-40x30 .label-item { font-size: 7.5pt; -webkit-line-clamp: 1; padding: 0 1.5mm; }
