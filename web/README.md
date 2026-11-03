@@ -260,6 +260,12 @@ again, and **كشف الحساب** prints the whole account. It works offline to
 - **Account statement:** every purchase with its date, price and what is left on
   it, every payment with its date, totals and instalment. For a long history,
   tick "only the last 12 payments" (the older ones are printed as one total).
+- **Account statement on WhatsApp:** always the full detail, even when only the
+  last 12 payments are printed. It lists each purchase (date, price, notes),
+  every payment made for it (date, time, تسبيق or دفعة, notes), its share of the
+  general payments, what is paid and left on it, then the general payments and a
+  summary. For a very long account, use the copy button if the WhatsApp link
+  doesn't open with the text.
 
 Choose **58 mm** or **80 mm** paper in the receipt window; the app remembers it on
 that device.

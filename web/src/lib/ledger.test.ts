@@ -164,7 +164,20 @@ describe("receipts", () => {
     expect(msg).toContain("⏳ المتبقي: *2.000 درهم*");
     expect(msg).toContain("▪️ ثلاجة: باقي 1.000 درهم\n▪️ ماشينة الصابون: باقي 1.000 درهم");
     expect(msg).toContain("📅 الدفعة المقبلة: 10/05/2026");
-    expect(statementMessage(statement(s, "20/04/2026 - 12:00"))).toContain("▪️ 10/01/2026 ثلاجة: 6.000 درهم (باقي 1.000 درهم)");
+  });
+
+  it("sends the whole account on WhatsApp with every purchase and payment", () => {
+    const s = summarizeClient(example(), client, "2026-04-20");
+    // Printing only the last payments doesn't shorten the WhatsApp summary.
+    const msg = statementMessage(statement(s, "20/04/2026 - 12:00", 3));
+    if (process.env.SHOW_MESSAGE) console.log(msg);
+    expect(msg).toContain("🛒 *1. ثلاجة*\n📅 تاريخ الشرا: 10/01/2026\n💰 الثمن: 6.000 درهم");
+    expect(msg).toContain("💵 الدفعات ديالها:\n   ▪️ 10/01/2026 - 10:00 · تسبيق: *2.000 درهم*");
+    expect(msg).toContain("   ▪️ من الدفعات العامة: 3.000 درهم\n✔️ تخلص منها: 5.000 درهم · ⏳ باقي: *1.000 درهم*");
+    expect(msg).toContain("🛒 *2. ماشينة الصابون*");
+    expect(msg).toContain("💵 *دفعات عامة* (كتنقص من السلع القدام الأولين):\n   ▪️ 10/02/2026 - 10:00 · دفعة: *1.000 درهم*");
+    expect(msg).toContain("💵 المدفوع: 6.500 درهم (5 دفعات)");
+    expect(msg).toContain("⏳ المتبقي: *2.000 درهم*");
   });
 
   it("opens the customer's chat with the message typed, only for a usable number", () => {
