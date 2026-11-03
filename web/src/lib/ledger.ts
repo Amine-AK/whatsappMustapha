@@ -748,11 +748,27 @@ export function monthsToFinish(remaining: number, installment: number, period: s
   return Math.ceil(remaining / perMonth);
 }
 
-/** Next due date after a payment made on `paidDate`. */
+/**
+ * The latest next due date allowed after a payment made on `paidDate`: one
+ * agreed period after the payment (e.g. paid 10/11, monthly → 10/12).
+ * "" when the period is set by hand (no limit).
+ */
+export function latestNextDue(client: Client, paidDate: string): string {
+  if (!client.period || isManualPeriod(client.period)) return "";
+  return nextDateForPeriod(client.period, paidDate);
+}
+
+/**
+ * Next due date after a payment made on `paidDate`: one period after the due
+ * date that was set, so a late customer isn't given extra time (due 31/10,
+ * paid 10/11, monthly → 30/11, not 10/12), but never later than one period
+ * after the payment (see latestNextDue).
+ */
 export function suggestNextDue(client: Client, paidDate: string): string {
-  if (!client.period || isManualPeriod(client.period)) return client.nextDueDate;
-  const from = client.nextDueDate && client.nextDueDate > paidDate ? client.nextDueDate : client.nextDueDate || paidDate;
-  return nextDateForPeriod(client.period, from) || client.nextDueDate;
+  const latest = latestNextDue(client, paidDate);
+  if (!latest) return client.nextDueDate;
+  const fromDue = client.nextDueDate ? nextDateForPeriod(client.period, client.nextDueDate) : "";
+  return fromDue && fromDue < latest ? fromDue : latest;
 }
 
 export function nowParts(now = new Date()): { date: string; time: string } {

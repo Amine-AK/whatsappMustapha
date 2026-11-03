@@ -13,6 +13,8 @@ import {
   type LedgerOp,
   type Payment,
   type Purchase,
+  latestNextDue,
+  suggestNextDue,
 } from "./ledger";
 import { ledgerToRows, migrateOldRows, rowsToLedger, sameRow, TABS } from "./ledger-sheet";
 import { paymentMessage, paymentReceipt, statement, statementMessage, whatsappLink } from "./receipt";
@@ -137,6 +139,32 @@ describe("operations are safe to repeat and to delay", () => {
     const id = newLedgerId("C");
     expect(isLedgerId(id)).toBe(true);
     expect(id).toMatch(/^C-[A-Z2-9]{8}$/);
+  });
+});
+
+describe("next due date after a payment", () => {
+  const monthly = (nextDueDate: string) => ({ ...client, period: "شهر", nextDueDate });
+
+  it("counts a late customer from the due date that was set, not from the payment day", () => {
+    // Due 31/10, monthly, came on 10/11 → 30/11 (one month after 31/10), not 10/12.
+    expect(suggestNextDue(monthly("2026-10-31"), "2026-11-10")).toBe("2026-11-30");
+  });
+
+  it("never goes past the payment day + the agreed period", () => {
+    // Paid early, on 10/11, while due 31/12: one month after the payment at most.
+    expect(latestNextDue(monthly("2026-12-31"), "2026-11-10")).toBe("2026-12-10");
+    expect(suggestNextDue(monthly("2026-12-31"), "2026-11-10")).toBe("2026-12-10");
+  });
+
+  it("paid on the due date: one period later", () => {
+    expect(suggestNextDue(monthly("2026-11-10"), "2026-11-10")).toBe("2026-12-10");
+    expect(suggestNextDue({ ...client, period: "سيمانة", nextDueDate: "2026-11-01" }, "2026-11-05")).toBe("2026-11-08");
+  });
+
+  it("no limit when the dates are set by hand", () => {
+    const manual = { ...client, period: "", nextDueDate: "2027-03-01" };
+    expect(latestNextDue(manual, "2026-11-10")).toBe("");
+    expect(suggestNextDue(manual, "2026-11-10")).toBe("2027-03-01");
   });
 });
 
