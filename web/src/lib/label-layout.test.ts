@@ -19,6 +19,12 @@ describe("sticker layout", () => {
     expect(pageCss(s, [100, 100, 50])).toContain("@page lbl-last { size: 50mm 2150mm;");
   });
 
+  it("swaps the page for paysage", () => {
+    const s = sanitizeSetup({ landscape: true, gap: 3 });
+    expect(s.landscape).toBe(true);
+    expect(pageCss(s, [2])).toBe("@page { size: 86mm 50mm; margin: 0; }");
+  });
+
   it("prints one page per sticker for label printers", () => {
     const s = sanitizeSetup({ mode: "pages", gap: 0 });
     expect(pageGroups(s, 3)).toEqual([1, 1, 1]);

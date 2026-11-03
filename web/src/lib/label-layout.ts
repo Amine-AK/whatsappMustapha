@@ -31,6 +31,11 @@ export interface LabelSetup {
   /** Turns the text and barcode inside the sticker. */
   rotate: Rotation;
   mode: FeedMode;
+  /**
+   * Paysage: the page goes to the printer in landscape (width and height
+   * swapped, the stickers drawn turned 90°), for drivers that print sideways.
+   */
+  landscape: boolean;
   /** What is printed, one line under the other, and how big (pt for text, mm for the barcode). */
   showShop: boolean;
   shopSize: number;
@@ -59,6 +64,7 @@ export const RECEIPT_PRINTER: LabelSetup = {
   dy: 0,
   rotate: 0,
   mode: "strip",
+  landscape: false,
   showShop: false,
   shopSize: 6.5,
   showItem: true,
@@ -111,7 +117,7 @@ export function sanitizeSetup(raw: unknown): LabelSetup {
   }
   if ([0, 90, 180, 270].includes(r.rotate as number)) out.rotate = r.rotate as Rotation;
   if (r.mode === "strip" || r.mode === "pages") out.mode = r.mode;
-  for (const k of ["showShop", "showItem", "priceBold", "showDigits"] as const) {
+  for (const k of ["showShop", "showItem", "priceBold", "showDigits", "landscape"] as const) {
     if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
   }
   // The margins must leave some room for the sticker's content.
@@ -156,12 +162,20 @@ export function pageGroups(s: LabelSetup, count: number): number[] {
  * starts on the next sticker.
  */
 export function pageCss(s: LabelSetup, groups: number[]): string {
-  const w = paperWidth(s);
   const first = groups[0] ?? 1;
   const last = groups[groups.length - 1] ?? first;
-  let css = `@page { size: ${w}mm ${round(first * pitch(s))}mm; margin: 0; }`;
-  if (last !== first) css += ` @page lbl-last { size: ${w}mm ${round(last * pitch(s))}mm; margin: 0; }`;
+  const size = (n: number) => {
+    const p = sheetSize(s, n);
+    return s.landscape ? `${p.h}mm ${p.w}mm` : `${p.w}mm ${p.h}mm`;
+  };
+  let css = `@page { size: ${size(first)}; margin: 0; }`;
+  if (last !== first) css += ` @page lbl-last { size: ${size(last)}; margin: 0; }`;
   return css;
+}
+
+/** A printed sheet of n stickers as it lies on the roll (mm), before any paysage turn. */
+export function sheetSize(s: LabelSetup, n: number) {
+  return { w: paperWidth(s), h: round(n * pitch(s)) };
 }
 
 /**

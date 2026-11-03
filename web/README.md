@@ -317,6 +317,10 @@ preview draws the sticker's edge (red dashes) and the space inside the margins.
 - **قد الملصق:** width, height, **الفراغ** (gap between two stickers, 0.1 mm
   steps) and **عرض الورقة** (paper width sent to the printer; 0 = sticker width,
   try 72 or 80 if the driver shrinks or cuts the sticker).
+- **اتجاه الورقة للطابعة:** **Portrait** (default) or **Paysage**: the page is
+  sent in landscape (width and height swapped, stickers drawn turned 90°), for
+  drivers that print the sticker sideways or shrunk. If it comes out upside
+  down, set **الدوران** to 180°.
 - **الهوامش:** empty space inside the sticker: top (header), bottom (footer), right, left.
 - **التحريك:** moves the whole sticker right/left and down/up.
 - **شنو نطبعو:** tick each line to print, top to bottom: shop name (off by

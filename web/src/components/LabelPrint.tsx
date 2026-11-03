@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ean13Modules, newShopCode, shopCodeOf, usedCodes } from "@/lib/barcode";
 import { money } from "@/lib/format";
-import { barcodeFit, contentSize, pageCss, pageGroups, type LabelSetup } from "@/lib/label-layout";
+import { barcodeFit, contentSize, pageCss, pageGroups, sheetSize, type LabelSetup } from "@/lib/label-layout";
 import { newLedgerId, nowParts, type StockItem } from "@/lib/ledger";
 import { SHOP } from "@/lib/receipt";
 import { currentSeller, searchStock } from "@/lib/shop";
@@ -101,6 +101,16 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
       <Label key={key} item={s} code={codeOf(s)} showPrice={showPrice} />
     );
 
+  // Paysage: the roll layout turned 90° (counter-clockwise) into a landscape page. Each
+  // sticker is turned in its own slot, side by side, so the page never splits a turned block.
+  const sheetBox = (n: number): CSSProperties => {
+    const p = sheetSize(setup, n);
+    return setup.landscape ? { width: `${p.h}mm`, height: `${p.w}mm` } : {};
+  };
+  const one = sheetSize(setup, 1);
+  const slotBox: CSSProperties = { width: `${one.h}mm`, height: `${one.w}mm` };
+  const turnBox: CSSProperties = { width: `${one.w}mm`, height: `${one.h}mm`, transform: `translateY(${one.w}mm) rotate(-90deg)` };
+
   /** The stickers as printed: on a roll, N per page (strip) or one per page. */
   function printPages() {
     if (!roll) return printed.map((s, i) => placed(s, i));
@@ -108,8 +118,18 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
     return groups.map((n, g) => {
       const last = g === groups.length - 1 && n !== groups[0];
       const sheet = (
-        <div key={g} className="label-sheet" style={last ? ({ page: "lbl-last" } as CSSProperties) : undefined}>
-          {printed.slice(at, at + n).map((s, i) => placed(s, at + i, calibrating))}
+        <div key={g} className="label-sheet" style={{ ...(last ? { page: "lbl-last" } : {}), ...sheetBox(n) } as CSSProperties}>
+          {printed.slice(at, at + n).map((s, i) =>
+            setup.landscape ? (
+              <div key={at + i} className="label-slot" style={slotBox}>
+                <div className="label-sheet-turn" style={turnBox}>
+                  {placed(s, at + i, calibrating)}
+                </div>
+              </div>
+            ) : (
+              placed(s, at + i, calibrating)
+            ),
+          )}
         </div>
       );
       at += n;

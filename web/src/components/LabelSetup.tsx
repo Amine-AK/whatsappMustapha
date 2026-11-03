@@ -135,6 +135,19 @@ export function LabelSetupPanel({
         </div>
       </fieldset>
 
+      <div className="field">
+        <span>اتجاه الورقة للطابعة</span>
+        <div className="segmented wide-seg" role="group" aria-label="اتجاه الورقة للطابعة">
+          <button type="button" className={!s.landscape ? "on" : ""} aria-pressed={!s.landscape} onClick={() => onChange({ ...s, landscape: false })}>
+            Portrait (طول)
+          </button>
+          <button type="button" className={s.landscape ? "on" : ""} aria-pressed={s.landscape} onClick={() => onChange({ ...s, landscape: true })}>
+            Paysage (عرض)
+          </button>
+        </div>
+        <span className="field-hint">جرب Paysage إلا الطابعة كتطبع الملصق مايل ولا مصغر. إلا خرج مقلوب، بدل «الدوران» لـ 180°.</span>
+      </div>
+
       <fieldset className="setup-group">
         <legend>🔲 الهوامش داخل الملصق</legend>
         <div className="setup-grid">
