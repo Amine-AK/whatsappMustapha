@@ -297,20 +297,23 @@ different suppliers carries one label with one name and one price.
   finds the product like a supplier's code.
 - **Sticker:** shop name, product name, price (untick **نطبعو الثمن** to leave
   it out), barcode and its digits.
-- **Paper:** a label printer roll of **40 × 30 mm** (the default) or
-  **50 × 30 mm** (one sticker per page), or an **A4** sheet of 24 stickers
+- **Paper:** a label printer roll of **50 × 40 mm** (the default), **40 × 30 mm**
+  or **50 × 30 mm** (one sticker per page), or an **A4** sheet of 24 stickers
   (3 × 8, 70 × 37 mm). The app remembers the choice on that device. In the print
   window choose the label size as the paper, **Margins: None** and **Scale: 100**.
-- **40 × 30 mm:** the barcode uses the whole width, each bar exactly 3 dots of a
+- **50 × 40 and 40 × 30 mm:** the barcode is drawn with each bar exactly 3 dots of a
   203 dpi printer, so it prints evenly on small stickers.
+- **50 × 40 or 40 × 50?** Choose 50×40 in the app either way. If the roll is
+  40 mm wide and 50 mm long (the sticker comes out sideways), set the driver's
+  paper to 40 × 50 mm and choose **90°** (or 270°) in the print test box.
 - **HPRT N41 (label printer, 203 dpi), once on the PC:**
   1. Install the HPRT driver for the N41 from the HPRT website, and connect it by USB.
-  2. Load **direct thermal** 40 × 30 mm labels (no ribbon needed), then calibrate
+  2. Load **direct thermal** 50 × 40 mm labels (no ribbon needed), then calibrate
      so it finds the gaps (see the printer's manual; usually hold the feed button).
-  3. *Printers > HPRT N41 > Printing preferences*: paper **40 × 30 mm**, media
+  3. *Printers > HPRT N41 > Printing preferences*: paper **50 × 40 mm**, media
      **labels with gaps**, orientation **portrait**. Start with darkness around
      the middle and a slower speed, and raise the darkness if the bars are grey.
-  4. In the app's print window choose the N41, paper 40 × 30 mm, **Margins: None**,
+  4. In the app's print window choose the N41, paper 50 × 40 mm, **Margins: None**,
      **Scale: 100**, no headers and footers. Print 2–3 stickers and scan them
      with the phone or USB scanner before printing a big batch.
 - After changing a price, print new stickers for the units on the shelf.
