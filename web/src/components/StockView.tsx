@@ -10,6 +10,7 @@ import { can, seesCost } from "@/lib/roles";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { CategoryForm } from "./CategoryForm";
 import { CategoryIcon } from "./CategoryIcon";
+import { LabelPrint } from "./LabelPrint";
 import { useScannerInput } from "./useScannerInput";
 import { Modal } from "./Modal";
 import type { LedgerState } from "./useLedger";
@@ -26,6 +27,7 @@ type Sub =
   | { kind: "delete"; item: StockItem }
   | { kind: "scan" }
   | { kind: "categories" }
+  | { kind: "labels"; item?: StockItem }
   | { kind: "category"; name?: string }
   | null;
 
@@ -82,12 +84,15 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         )}
       </section>
 
-      <div className="actions-row in-flow">
+      <div className="actions-row in-flow four">
         <button type="button" className="btn" onClick={() => setSub({ kind: "categories" })}>
           🗂️ الفئات
         </button>
         <button type="button" className="btn" onClick={() => setSub({ kind: "scan" })}>
           📷 سكاني
+        </button>
+        <button type="button" className="btn" onClick={() => setSub({ kind: "labels" })}>
+          🏷️ باركود
         </button>
         <button type="button" className="btn primary" onClick={() => setSub({ kind: "add" })}>
           ＋ سلعة جديدة
@@ -173,6 +178,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           code={sub.kind === "add" ? sub.code : undefined}
           onClose={() => setSub(null)}
           onDelete={sub.kind === "edit" ? () => setSub({ kind: "delete", item: sub.item }) : undefined}
+          onLabels={sub.kind === "edit" ? () => setSub({ kind: "labels", item: sub.item }) : undefined}
           onSaved={(msg) => {
             onToast(msg);
             setSub(null);
@@ -189,6 +195,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           onAttach={(item) => setSub({ kind: "adjust", item, newCode: sub.code })}
         />
       )}
+      {sub?.kind === "labels" && <LabelPrint data={data} preselect={sub.item} onClose={() => setSub(null)} onToast={onToast} />}
       {sub?.kind === "scan" && (
         <BarcodeScanner
           title="📷 سكاني السلعة"
@@ -264,6 +271,7 @@ function StockForm({
   onClose,
   onSaved,
   onDelete,
+  onLabels,
 }: {
   data: LedgerState;
   item?: StockItem;
@@ -272,6 +280,8 @@ function StockForm({
   onClose: () => void;
   onSaved: (msg: string) => void;
   onDelete?: () => void;
+  /** Print the shop's barcode stickers for this product. */
+  onLabels?: () => void;
 }) {
   const ledger = data.ledger!;
   const [v, setV] = useState({
@@ -410,6 +420,11 @@ function StockForm({
           <p className="muted small wide">
             الكمية: {item.quantity} (بدلها بـ ± فاللائحة) · تزادت {displayDate(item.createdAt.slice(0, 10))}
           </p>
+        )}
+        {item && onLabels && (
+          <button type="button" className="btn wide" onClick={onLabels}>
+            🏷️ طبع باركود المحل
+          </button>
         )}
         {item && onDelete && (
           <button type="button" className="btn danger-ghost wide" onClick={onDelete}>

@@ -275,6 +275,40 @@ that device.
 
 Do a test print once to check the width; if the right side is cut, choose 58 mm.
 
+## Shop barcode stickers (باركود المحل)
+
+Each product can get the shop's own barcode, so the same item bought from
+different suppliers carries one label with one name and one price.
+
+- **Make and print:** in **المخزون**, press **🏷️ باركود**. Tick the products (or
+  **ختار هادو كاملين**: one sticker per unit in stock), change the number of
+  stickers if needed, and press **🖨️ طبع**. From a product's edit window,
+  **🏷️ طبع باركود المحل** opens it with that product already chosen.
+- **The code:** an EAN-13 that starts with **2**. Codes starting with 2 are
+  reserved for in-store use, so they never match a factory barcode. It is saved
+  with the product's other codes (column «أكواد أخرى (موردين آخرين)») the first time you print,
+  and stays the same at every reprint. Scanning it in **البيع** or **المخزون**
+  finds the product like a supplier's code.
+- **Sticker:** shop name, product name, price (untick **نطبعو الثمن** to leave
+  it out), barcode and its digits.
+- **Paper:** a label printer roll of **40 × 30 mm** (the default) or
+  **50 × 30 mm** (one sticker per page), or an **A4** sheet of 24 stickers
+  (3 × 8, 70 × 37 mm). The app remembers the choice on that device. In the print
+  window choose the label size as the paper, **Margins: None** and **Scale: 100**.
+- **40 × 30 mm:** the barcode uses the whole width, each bar exactly 3 dots of a
+  203 dpi printer, so it prints evenly on small stickers.
+- **HPRT N41 (label printer, 203 dpi), once on the PC:**
+  1. Install the HPRT driver for the N41 from the HPRT website, and connect it by USB.
+  2. Load **direct thermal** 40 × 30 mm labels (no ribbon needed), then calibrate
+     so it finds the gaps (see the printer's manual; usually hold the feed button).
+  3. *Printers > HPRT N41 > Printing preferences*: paper **40 × 30 mm**, media
+     **labels with gaps**, orientation **portrait**. Start with darkness around
+     the middle and a slower speed, and raise the darkness if the bars are grey.
+  4. In the app's print window choose the N41, paper 40 × 30 mm, **Margins: None**,
+     **Scale: 100**, no headers and footers. Print 2–3 stickers and scan them
+     with the phone or USB scanner before printing a big batch.
+- After changing a price, print new stickers for the units on the shelf.
+
 ## Working without internet
 
 After the app has been opened once with internet on a device, it also works
