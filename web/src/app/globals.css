@@ -906,6 +906,12 @@ a.btn { text-decoration: none; }
 }
 .call-mini:hover { background: var(--accent); color: #fff; }
 
+/* Next due date typed by hand outside the rules: allowed, but very visible. */
+.due-warning {
+  margin: 0; padding: 10px 12px; border-radius: 10px; border: 2px solid var(--danger);
+  background: var(--danger-soft); color: var(--danger); font-size: 22px; font-weight: 800; line-height: 1.35;
+}
+
 /* ---------------------------------------------------------------- product codes (QR / barcode / S/N) */
 
 .field textarea, .code-row textarea {

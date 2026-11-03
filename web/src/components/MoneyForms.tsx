@@ -284,6 +284,15 @@ export function PaymentForm({
   const latestNext = latestNextDue(target.client, isISODate(v.date) ? v.date : today);
   const amount = parseAmount(v.amount || "");
   const after = target.remaining + (payment && clientId === payment.clientId ? payment.amount : 0) - (amount > 0 ? amount : 0);
+  // A date typed by hand can break the rules: allowed, with a big warning.
+  const nextWarning =
+    editing || after <= 0 || !isISODate(v.nextDueDate)
+      ? ""
+      : latestNext && v.nextDueDate > latestNext
+        ? `⚠️ الدفعة المقبلة كتفوت ${displayDate(latestNext)} (تاريخ الأداء + ${target.client.period})`
+        : isISODate(v.date) && v.nextDueDate <= v.date
+          ? "⚠️ الدفعة المقبلة قبل نهار الأداء ولا فنفس النهار"
+          : "";
 
   const set = (k: keyof typeof v) => (value: string) => {
     setV((o) => {
@@ -312,8 +321,6 @@ export function PaymentForm({
     if (!(amount > 0)) err.amount = "دخل المبلغ";
     if (!isISODate(v.date)) err.date = "التاريخ ضروري";
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(v.time)) err.time = "الساعة غير صحيحة";
-    // Never more than one agreed period after the payment.
-    if (!editing && after > 0 && latestNext && v.nextDueDate > latestNext) err.nextDueDate = `ما خاصهاش تفوت ${displayDate(latestNext)} (تاريخ الأداء + ${target.client.period})`;
     setErrors(err);
     const first = Object.keys(err)[0];
     if (first) document.getElementById(`pa-${first}`)?.focus();
@@ -446,7 +453,6 @@ export function PaymentForm({
           <Field
             id="pa-nextDueDate"
             label="الدفعة المقبلة"
-            error={errors.nextDueDate}
             hint={
               after <= 0
                 ? "غادي يخلص كلشي"
@@ -457,8 +463,13 @@ export function PaymentForm({
                     : undefined
             }
           >
-            <input id="pa-nextDueDate" type="date" value={after > 0 ? v.nextDueDate : ""} max={latestNext || undefined} disabled={after <= 0} onChange={(e) => set("nextDueDate")(e.target.value)} />
+            <input id="pa-nextDueDate" type="date" value={after > 0 ? v.nextDueDate : ""} disabled={after <= 0} onChange={(e) => set("nextDueDate")(e.target.value)} />
           </Field>
+        )}
+        {nextWarning && (
+          <h2 className="due-warning wide" role="alert">
+            {nextWarning}
+          </h2>
         )}
         <Field id="pa-notes" label="ملاحظات" wide>
           <input id="pa-notes" value={v.notes} onChange={(e) => set("notes")(e.target.value)} />
