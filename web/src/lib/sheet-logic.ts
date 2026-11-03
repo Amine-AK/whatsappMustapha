@@ -120,10 +120,15 @@ export function parseSheetDate(value: unknown): string {
 
 /** Next payment date one period after `fromISO`. */
 export function nextDateForPeriod(period: string, fromISO: string): string {
+  return addPeriods(period, fromISO, 1);
+}
+
+/** `count` periods after `fromISO` (counted from the start, so 31/08 + 2 months = 31/10). "" for a period set by hand. */
+export function addPeriods(period: string, fromISO: string, count: number): string {
   const p = String(period ?? "");
-  if (p.includes("سيمانة") || p.includes("أسبوع") || p.includes("7")) return addDays(fromISO, 7);
-  if (p.includes("15")) return addDays(fromISO, 15);
-  if (p.includes("شهر") || p.includes("30")) return addMonths(fromISO, 1);
+  if (p.includes("سيمانة") || p.includes("أسبوع") || p.includes("7")) return addDays(fromISO, 7 * count);
+  if (p.includes("15")) return addDays(fromISO, 15 * count);
+  if (p.includes("شهر") || p.includes("30")) return addMonths(fromISO, count);
   return "";
 }
 

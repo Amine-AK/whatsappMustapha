@@ -7,6 +7,7 @@ import { displayDate, displayDateTime } from "@/lib/receipt";
 import { filterSales, percent, rangeOf, report, type Group, type RangePreset } from "@/lib/shop";
 import { can, seesCost } from "@/lib/roles";
 import { SaleTicketDialog } from "./SaleTicket";
+import { EyeButton, shown, useHiddenAmount } from "./HideAmount";
 import type { LedgerState } from "./useLedger";
 import { Confirm } from "./ui";
 
@@ -23,6 +24,9 @@ const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "ماي"
 export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (msg: string) => void }) {
   const ledger = data.ledger!;
   const cost = seesCost(data.me);
+  const owner = data.me?.role === "owner";
+  const [hideRevenue, toggleRevenue] = useHiddenAmount("sales-total");
+  const [hideProfit, toggleProfit] = useHiddenAmount("profit");
   const [preset, setPreset] = useState<RangePreset>("month");
   const [custom, setCustom] = useState({ from: data.today.slice(0, 8) + "01", to: data.today });
   const [category, setCategory] = useState("");
@@ -82,17 +86,21 @@ export function ReportsView({ data, onToast }: { data: LedgerState; onToast: (ms
 
       <section className="summary kpis" aria-label="الأرقام">
         <div className="stat">
-          <span className="stat-label">إجمالي المبيعات</span>
-          <span className="stat-value">{money(r.revenue)}</span>
+          <span className="stat-label">
+            إجمالي المبيعات {owner && <EyeButton hidden={hideRevenue} onToggle={toggleRevenue} what="إجمالي المبيعات" />}
+          </span>
+          <span className="stat-value">{shown(owner && hideRevenue, money(r.revenue))}</span>
           <span className="stat-sub">
             {r.tickets} بيعة · {r.units} وحدة
           </span>
         </div>
         {cost && (
         <div className="stat profit-stat">
-          <span className="stat-label">الأرباح الصافية</span>
-          <span className="stat-value">{money(r.profit)}</span>
-          <span className="stat-sub">{r.unknownCost > 0 ? `${r.unknownCost} بلا ثمن الشراء (ما محسوبينش)` : r.revenue > 0 ? `${percent(r.profit, r.revenue)}% من المبيعات` : "—"}</span>
+          <span className="stat-label">
+            الأرباح الصافية {owner && <EyeButton hidden={hideProfit} onToggle={toggleProfit} what="الأرباح الصافية" />}
+          </span>
+          <span className="stat-value">{shown(owner && hideProfit, money(r.profit))}</span>
+          <span className="stat-sub">{owner && hideProfit ? "—" : r.unknownCost > 0 ? `${r.unknownCost} بلا ثمن الشراء (ما محسوبينش)` : r.revenue > 0 ? `${percent(r.profit, r.revenue)}% من المبيعات` : "—"}</span>
         </div>
         )}
         <div className="stat">

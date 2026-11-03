@@ -7,7 +7,7 @@
 // it in the Google Sheet), so both always agree. Operations are safe to send
 // twice: a second copy is recognised and skipped.
 
-import { addDays, addMonths, dueStatus, isISODate, isManualPeriod, nextDateForPeriod, type DueStatus } from "./sheet-logic";
+import { addDays, addMonths, addPeriods, dueStatus, isISODate, isManualPeriod, nextDateForPeriod, type DueStatus } from "./sheet-logic";
 
 export interface Client {
   id: string;
@@ -748,11 +748,33 @@ export function monthsToFinish(remaining: number, installment: number, period: s
   return Math.ceil(remaining / perMonth);
 }
 
-/** Next due date after a payment made on `paidDate`. */
+/**
+ * The latest next due date allowed after a payment made on `paidDate`: one
+ * agreed period after the payment (e.g. paid 10/11, monthly → 10/12).
+ * "" when the period is set by hand (no limit).
+ */
+export function latestNextDue(client: Client, paidDate: string): string {
+  if (!client.period || isManualPeriod(client.period)) return "";
+  return nextDateForPeriod(client.period, paidDate);
+}
+
+/**
+ * Next due date after a payment made on `paidDate`: the next date on the
+ * customer's schedule (the due date that was set + one period, two…) that
+ * comes after the payment day. A late customer isn't given extra time (due
+ * 31/10, monthly, paid 10/11 → 30/11, not 10/12), the date is never before
+ * the payment day (due 31/08, paid 10/11 → 30/11), and never later than one
+ * period after the payment (see latestNextDue).
+ */
 export function suggestNextDue(client: Client, paidDate: string): string {
-  if (!client.period || isManualPeriod(client.period)) return client.nextDueDate;
-  const from = client.nextDueDate && client.nextDueDate > paidDate ? client.nextDueDate : client.nextDueDate || paidDate;
-  return nextDateForPeriod(client.period, from) || client.nextDueDate;
+  const latest = latestNextDue(client, paidDate);
+  if (!latest) return client.nextDueDate;
+  if (!client.nextDueDate) return latest;
+  for (let k = 1; k <= 1000; k++) {
+    const d = addPeriods(client.period, client.nextDueDate, k);
+    if (d > paidDate) return d < latest ? d : latest;
+  }
+  return latest;
 }
 
 export function nowParts(now = new Date()): { date: string; time: string } {

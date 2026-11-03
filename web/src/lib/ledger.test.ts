@@ -13,6 +13,8 @@ import {
   type LedgerOp,
   type Payment,
   type Purchase,
+  latestNextDue,
+  suggestNextDue,
 } from "./ledger";
 import { ledgerToRows, migrateOldRows, rowsToLedger, sameRow, TABS } from "./ledger-sheet";
 import { paymentMessage, paymentReceipt, statement, statementMessage, whatsappLink } from "./receipt";
@@ -140,6 +142,39 @@ describe("operations are safe to repeat and to delay", () => {
   });
 });
 
+describe("next due date after a payment", () => {
+  const monthly = (nextDueDate: string) => ({ ...client, period: "شهر", nextDueDate });
+
+  it("counts a late customer from the due date that was set, not from the payment day", () => {
+    // Due 31/10, monthly, came on 10/11 → 30/11 (one month after 31/10), not 10/12.
+    expect(suggestNextDue(monthly("2026-10-31"), "2026-11-10")).toBe("2026-11-30");
+  });
+
+  it("never goes past the payment day + the agreed period", () => {
+    // Paid early, on 10/11, while due 31/12: one month after the payment at most.
+    expect(latestNextDue(monthly("2026-12-31"), "2026-11-10")).toBe("2026-12-10");
+    expect(suggestNextDue(monthly("2026-12-31"), "2026-11-10")).toBe("2026-12-10");
+  });
+
+  it("paid on the due date: one period later", () => {
+    expect(suggestNextDue(monthly("2026-11-10"), "2026-11-10")).toBe("2026-12-10");
+    expect(suggestNextDue({ ...client, period: "سيمانة", nextDueDate: "2026-11-01" }, "2026-11-05")).toBe("2026-11-08");
+  });
+
+  it("never before the payment day, even for a customer late by several periods", () => {
+    // Due 31/08, monthly, came on 10/11: 30/09 and 31/10 are already past → 30/11.
+    expect(suggestNextDue(monthly("2026-08-31"), "2026-11-10")).toBe("2026-11-30");
+    // Due 10/10, paid 10/11: 10/11 would be today → 10/12.
+    expect(suggestNextDue(monthly("2026-10-10"), "2026-11-10")).toBe("2026-12-10");
+  });
+
+  it("no limit when the dates are set by hand", () => {
+    const manual = { ...client, period: "", nextDueDate: "2027-03-01" };
+    expect(latestNextDue(manual, "2026-11-10")).toBe("");
+    expect(suggestNextDue(manual, "2026-11-10")).toBe("2027-03-01");
+  });
+});
+
 describe("receipts", () => {
   it("prints a payment with the account as it was that day", () => {
     const s = summarizeClient(example(), client, "2026-04-20");
@@ -164,7 +199,20 @@ describe("receipts", () => {
     expect(msg).toContain("⏳ المتبقي: *2.000 درهم*");
     expect(msg).toContain("▪️ ثلاجة: باقي 1.000 درهم\n▪️ ماشينة الصابون: باقي 1.000 درهم");
     expect(msg).toContain("📅 الدفعة المقبلة: 10/05/2026");
-    expect(statementMessage(statement(s, "20/04/2026 - 12:00"))).toContain("▪️ 10/01/2026 ثلاجة: 6.000 درهم (باقي 1.000 درهم)");
+  });
+
+  it("sends the whole account on WhatsApp with every purchase and payment", () => {
+    const s = summarizeClient(example(), client, "2026-04-20");
+    // Printing only the last payments doesn't shorten the WhatsApp summary.
+    const msg = statementMessage(statement(s, "20/04/2026 - 12:00", 3));
+    if (process.env.SHOW_MESSAGE) console.log(msg);
+    expect(msg).toContain("🛒 *1. ثلاجة*\n📅 تاريخ الشرا: 10/01/2026\n💰 الثمن: 6.000 درهم");
+    expect(msg).toContain("💵 الدفعات ديالها:\n   ▪️ 10/01/2026 - 10:00 · تسبيق: *2.000 درهم*");
+    expect(msg).toContain("   ▪️ من الدفعات العامة: 3.000 درهم\n✔️ تخلص منها: 5.000 درهم · ⏳ باقي: *1.000 درهم*");
+    expect(msg).toContain("🛒 *2. ماشينة الصابون*");
+    expect(msg).toContain("💵 *دفعات عامة* (كتنقص من السلع القدام الأولين):\n   ▪️ 10/02/2026 - 10:00 · دفعة: *1.000 درهم*");
+    expect(msg).toContain("💵 المدفوع: 6.500 درهم (5 دفعات)");
+    expect(msg).toContain("⏳ المتبقي: *2.000 درهم*");
   });
 
   it("opens the customer's chat with the message typed, only for a usable number", () => {

@@ -8,6 +8,7 @@ import {
   newLedgerId,
   nowParts,
   PAYMENT_KINDS,
+  latestNextDue,
   suggestNextDue,
   summarizeClient,
   type ClientSummary,
@@ -278,11 +279,28 @@ export function PaymentForm({
   });
   const [errors, setErrors] = useState<Errors>({});
   const [confirm, setConfirm] = useState(false);
+  // Until the next date is changed by hand, it follows the payment date and the customer.
+  const [nextTouched, setNextTouched] = useState(false);
+  const latestNext = latestNextDue(target.client, isISODate(v.date) ? v.date : today);
   const amount = parseAmount(v.amount || "");
   const after = target.remaining + (payment && clientId === payment.clientId ? payment.amount : 0) - (amount > 0 ? amount : 0);
+  // A date typed by hand can break the rules: allowed, with a big warning.
+  const nextWarning =
+    editing || after <= 0 || !isISODate(v.nextDueDate)
+      ? ""
+      : latestNext && v.nextDueDate > latestNext
+        ? `⚠️ الدفعة المقبلة كتفوت ${displayDate(latestNext)} (تاريخ الأداء + ${target.client.period})`
+        : isISODate(v.date) && v.nextDueDate <= v.date
+          ? "⚠️ الدفعة المقبلة قبل نهار الأداء ولا فنفس النهار"
+          : "";
 
   const set = (k: keyof typeof v) => (value: string) => {
-    setV((o) => ({ ...o, [k]: value }));
+    setV((o) => {
+      const next = { ...o, [k]: value };
+      if (k === "date" && !nextTouched && isISODate(value)) next.nextDueDate = suggestNextDue(target.client, value);
+      return next;
+    });
+    if (k === "nextDueDate") setNextTouched(true);
     setErrors((e) => ({ ...e, [k]: "" }));
   };
 
@@ -290,7 +308,12 @@ export function PaymentForm({
     setClientId(id);
     // Items belong to a customer: pick the new customer's oldest unpaid item.
     const other = data.ledger?.clients.find((c) => c.id === id);
-    if (other && data.ledger) setV((o) => ({ ...o, purchaseId: defaultPurchaseFor(summarizeClient(data.ledger!, other, today)) }));
+    if (other && data.ledger)
+      setV((o) => ({
+        ...o,
+        purchaseId: defaultPurchaseFor(summarizeClient(data.ledger!, other, today)),
+        nextDueDate: nextTouched ? o.nextDueDate : suggestNextDue(other, isISODate(o.date) ? o.date : today),
+      }));
   }
 
   function validate(): boolean {
@@ -427,9 +450,26 @@ export function PaymentForm({
           </select>
         </Field>
         {!editing && (
-          <Field id="pa-next" label="الدفعة المقبلة" hint={after <= 0 ? "غادي يخلص كلشي" : summary.client.period ? `كل ${summary.client.period}` : undefined}>
-            <input id="pa-next" type="date" value={after > 0 ? v.nextDueDate : ""} disabled={after <= 0} onChange={(e) => set("nextDueDate")(e.target.value)} />
+          <Field
+            id="pa-nextDueDate"
+            label="الدفعة المقبلة"
+            hint={
+              after <= 0
+                ? "غادي يخلص كلشي"
+                : latestNext
+                  ? `كل ${target.client.period}${target.client.nextDueDate && target.client.nextDueDate < v.date ? ` · محسوبة من ${displayDate(target.client.nextDueDate)} (كان متأخر)` : ""} · ما تفوتش ${displayDate(latestNext)}`
+                  : target.client.period
+                    ? `كل ${target.client.period}`
+                    : undefined
+            }
+          >
+            <input id="pa-nextDueDate" type="date" value={after > 0 ? v.nextDueDate : ""} disabled={after <= 0} onChange={(e) => set("nextDueDate")(e.target.value)} />
           </Field>
+        )}
+        {nextWarning && (
+          <h2 className="due-warning wide" role="alert">
+            {nextWarning}
+          </h2>
         )}
         <Field id="pa-notes" label="ملاحظات" wide>
           <input id="pa-notes" value={v.notes} onChange={(e) => set("notes")(e.target.value)} />
