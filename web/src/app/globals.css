@@ -893,6 +893,12 @@ a.btn { text-decoration: none; }
 }
 .delete-mini:hover:not(:disabled) { background: var(--danger); color: #fff; }
 .delete-mini:disabled { opacity: 0.5; cursor: not-allowed; }
+.call-mini {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 2px 12px; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); color: var(--accent);
+  font-size: 13px; font-weight: 600; text-decoration: none;
+}
+.call-mini:hover { background: var(--accent); color: #fff; }
 
 /* ---------------------------------------------------------------- product codes (QR / barcode / S/N) */
 

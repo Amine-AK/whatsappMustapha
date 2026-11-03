@@ -66,9 +66,14 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
             {c.id}
           </span>
           {c.phone && (
-            <a className="phone" href={`tel:${c.phone.replace(/\s/g, "")}`} dir="ltr">
-              {c.phone}
-            </a>
+            <>
+              <a className="phone" href={`tel:${c.phone.replace(/[^\d+]/g, "")}`} dir="ltr">
+                {c.phone}
+              </a>
+              <a className="call-mini" href={`tel:${c.phone.replace(/[^\d+]/g, "")}`} aria-label={`اتصل بـ ${c.name}`} title="اتصل">
+                📞 اتصل
+              </a>
+            </>
           )}
           {allow("client_delete") && (
           <button type="button" className="delete-mini" onClick={() => setSub({ kind: "delete-client" })} disabled={busy} aria-label={`حذف ${c.name}`} title="حذف الزبون">
