@@ -10,10 +10,10 @@ import { currentSeller, searchStock } from "@/lib/shop";
 import { Modal } from "./Modal";
 import type { LedgerState } from "./useLedger";
 
-type Size = "50x30" | "40x25" | "a4";
+type Size = "40x30" | "50x30" | "a4";
 const SIZES: { value: Size; label: string; hint: string; mm: string }[] = [
+  { value: "40x30", label: "40×30", hint: "رول ديال طابعة الملصقات (HPRT N41…)", mm: "40 × 30 mm" },
   { value: "50x30", label: "50×30", hint: "رول ديال طابعة الملصقات", mm: "50 × 30 mm" },
-  { value: "40x25", label: "40×25", hint: "رول ديال ملصقات صغار", mm: "40 × 25 mm" },
   { value: "a4", label: "A4", hint: "ورقة A4 ديال 24 ملصق (3 × 8)", mm: "70 × 37 mm" },
 ];
 const SIZE_KEY = "label-size";
@@ -29,14 +29,14 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const [query, setQuery] = useState("");
   // Product id → number of labels.
   const [counts, setCounts] = useState<Record<string, number>>(() => (preselect ? { [preselect.id]: Math.max(1, preselect.quantity) } : {}));
-  const [size, setSize] = useState<Size>("50x30");
+  const [size, setSize] = useState<Size>("40x30");
   const [showPrice, setShowPrice] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     try {
       const s = localStorage.getItem(SIZE_KEY);
-      if (s === "40x25" || s === "a4" || s === "50x30") setSize(s);
+      if (s === "40x30" || s === "a4" || s === "50x30") setSize(s);
       setShowPrice(localStorage.getItem(PRICE_KEY) !== "no");
     } catch {}
     setMounted(true);
@@ -224,16 +224,20 @@ function Label({ item, code, size, showPrice }: { item: StockItem; code: string;
       <p className="label-shop">{SHOP.name}</p>
       <p className="label-item">{item.item}</p>
       {showPrice && <p className="label-price">{money(item.sellPrice)}</p>}
-      <Ean13 code={code} />
+      {/* 40 mm wide at 203 dpi: each bar exactly 3 printer dots (0.375 mm), so all bars print the same width. */}
+      {size === "40x30" ? <Ean13 code={code} width={320 / 3} left={6} /> : <Ean13 code={code} />}
     </div>
   );
 }
 
-/** An EAN-13 as SVG bars, with the digits under it. */
-export function Ean13({ code }: { code: string }) {
+/**
+ * An EAN-13 as SVG bars, with the digits under it. `width` is the whole
+ * drawing in bar widths (modules) and `left` the white space before the bars;
+ * by default 11 white modules on each side, as scanners like.
+ */
+export function Ean13({ code, width = 95 + 22, left = 11 }: { code: string; width?: number; left?: number }) {
   const m = ean13Modules(code);
-  // 11 quiet modules on each side, as scanners need.
-  const W = 95 + 22;
+  const W = width;
   const bars: { x: number; w: number; guard: boolean }[] = [];
   for (let i = 0; i < m.length; ) {
     if (m[i] !== "1") {
@@ -242,16 +246,16 @@ export function Ean13({ code }: { code: string }) {
     }
     let j = i;
     while (m[j] === "1") j++;
-    bars.push({ x: i + 11, w: j - i, guard: i < 3 || (i >= 45 && i < 50) || i >= 92 });
+    bars.push({ x: i + left, w: j - i, guard: i < 3 || (i >= 45 && i < 50) || i >= 92 });
     i = j;
   }
   return (
-    <svg className="ean13" viewBox={`0 0 ${W} 42`} role="img" aria-label={`باركود ${code}`}>
+    <svg className="ean13" viewBox={`0 0 ${W} 42`} shapeRendering="crispEdges" role="img" aria-label={`باركود ${code}`}>
       <rect width={W} height={42} fill="#fff" />
       {bars.map((b) => (
         <rect key={b.x} x={b.x} y={0} width={b.w} height={b.guard ? 33 : 30} fill="#000" />
       ))}
-      <text x={W / 2} y={41} textAnchor="middle" fontSize={7} fontFamily="monospace" fill="#000" letterSpacing={1.2}>
+      <text x={left + 47.5} y={41} textAnchor="middle" fontSize={7} fontFamily="monospace" fill="#000" letterSpacing={1.2}>
         {code}
       </text>
     </svg>

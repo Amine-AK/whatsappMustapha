@@ -291,10 +291,22 @@ different suppliers carries one label with one name and one price.
   finds the product like a supplier's code.
 - **Sticker:** shop name, product name, price (untick **نطبعو الثمن** to leave
   it out), barcode and its digits.
-- **Paper:** a label printer roll of **50 × 30 mm** or **40 × 25 mm** (one
-  sticker per page), or an **A4** sheet of 24 stickers (3 × 8, 70 × 37 mm). The
-  app remembers the choice on that device. In the print window choose the label
-  size as the paper, **Margins: None** and **Scale: 100**.
+- **Paper:** a label printer roll of **40 × 30 mm** (the default) or
+  **50 × 30 mm** (one sticker per page), or an **A4** sheet of 24 stickers
+  (3 × 8, 70 × 37 mm). The app remembers the choice on that device. In the print
+  window choose the label size as the paper, **Margins: None** and **Scale: 100**.
+- **40 × 30 mm:** the barcode uses the whole width, each bar exactly 3 dots of a
+  203 dpi printer, so it prints evenly on small stickers.
+- **HPRT N41 (label printer, 203 dpi), once on the PC:**
+  1. Install the HPRT driver for the N41 from the HPRT website, and connect it by USB.
+  2. Load **direct thermal** 40 × 30 mm labels (no ribbon needed), then calibrate
+     so it finds the gaps (see the printer's manual; usually hold the feed button).
+  3. *Printers > HPRT N41 > Printing preferences*: paper **40 × 30 mm**, media
+     **labels with gaps**, orientation **portrait**. Start with darkness around
+     the middle and a slower speed, and raise the darkness if the bars are grey.
+  4. In the app's print window choose the N41, paper 40 × 30 mm, **Margins: None**,
+     **Scale: 100**, no headers and footers. Print 2–3 stickers and scan them
+     with the phone or USB scanner before printing a big batch.
 - After changing a price, print new stickers for the units on the shelf.
 
 ## Working without internet
