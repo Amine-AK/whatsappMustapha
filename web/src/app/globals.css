@@ -568,10 +568,23 @@ input[type="date"] { min-height: 44px; }
 .label.size-a4 .label-item { font-size: 9pt; }
 .label.size-a4 .label-price { font-size: 12pt; }
 
+/* A roll sticker in its own page box (turned / shifted by the DEV ONLY print tests). */
+.label-page { position: relative; overflow: hidden; background: #fff; }
+.label-page-inner { position: absolute; left: 50%; top: 50%; }
+.label-preview .label-page { box-shadow: 0 2px 10px rgb(0 0 0 / 18%); }
+.label-preview .label-page .label { box-shadow: none; }
+
+/* DEV ONLY: print tests box. Remove with PrintTest.tsx. */
+.print-test { display: grid; gap: 10px; padding: 10px 12px; border: 1px dashed var(--warn); border-radius: 10px; margin: 0; }
+.print-test legend { font-size: 14px; font-weight: 700; color: var(--warn); padding: 0 4px; }
+.print-test-shift { display: grid; gap: 6px; font-size: 14px; }
+.print-test-arrows { display: flex; gap: 6px; }
+.print-test-arrows .btn { flex: 1; min-height: 40px; padding: 0; }
+
 @media print {
   /* Rolls: one sticker per page. A4: a 3×8 grid. */
-  .labels-print .label { break-after: page; page-break-after: always; }
-  .labels-print .label:last-child { break-after: auto; page-break-after: auto; }
+  .labels-print .label-page { break-after: page; page-break-after: always; }
+  .labels-print .label-page:last-child { break-after: auto; page-break-after: auto; }
   #print-root.labels-print.size-a4 { display: grid; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37mm; }
   .labels-print.size-a4 .label { break-after: auto; page-break-after: auto; break-inside: avoid; }
 }
