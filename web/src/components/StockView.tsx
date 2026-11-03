@@ -11,6 +11,7 @@ import { BarcodeScanner } from "./BarcodeScanner";
 import { CategoryForm } from "./CategoryForm";
 import { CategoryIcon } from "./CategoryIcon";
 import { LabelPrint } from "./LabelPrint";
+import { EyeButton, shown, useHiddenAmount } from "./HideAmount";
 import { useScannerInput } from "./useScannerInput";
 import { Modal } from "./Modal";
 import type { LedgerState } from "./useLedger";
@@ -41,6 +42,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const viewRef = useRef<HTMLDivElement>(null);
   const fullStock = can(data.me, "stock");
   const cost = seesCost(data.me);
+  const [hideValue, toggleValue] = useHiddenAmount("stock-value");
 
   /** Scanned (camera or USB scanner): more of a known product, or a new card with the code. */
   function scanned(code: string) {
@@ -77,8 +79,10 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         </div>
         {data.me?.role === "owner" && (
           <div className="stat">
-            <span className="stat-label">قيمة المخزون</span>
-            <span className="stat-value">{money(value)}</span>
+            <span className="stat-label">
+              قيمة المخزون <EyeButton hidden={hideValue} onToggle={toggleValue} what="قيمة المخزون" />
+            </span>
+            <span className="stat-value">{shown(hideValue, money(value))}</span>
             <span className="stat-sub">بثمن الشراء</span>
           </div>
         )}
