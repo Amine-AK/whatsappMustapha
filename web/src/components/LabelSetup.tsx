@@ -36,7 +36,7 @@ export function useLabelSetup(): [LabelSetup, (s: LabelSetup) => void] {
       const size = localStorage.getItem(OLD_SIZE_KEY);
       const dims = size === "40x30" ? { w: 40, h: 30 } : size === "50x30" ? { w: 50, h: 30 } : {};
       const old = JSON.parse(localStorage.getItem(OLD_TEST_KEY) ?? "null");
-      if (old) setS(sanitizeSetup({ ...LABEL_PRINTER, ...dims, rotate: old.rotate, dx: old.dx, dy: old.dy }));
+      if (old) setS(sanitizeSetup({ ...LABEL_PRINTER, ...dims, rotate: old.rotate, dx: old.dx, dy: old.dy, driverPage: old.page === "auto" }));
       else if (dims.w) setS(sanitizeSetup({ ...DEFAULT_SETUP, ...dims }));
     } catch {}
   }, []);
@@ -136,6 +136,22 @@ export function LabelSetupPanel({
       </fieldset>
 
       <div className="field">
+        <span>حجم الورقة</span>
+        <div className="segmented wide-seg" role="group" aria-label="حجم الورقة">
+          <button type="button" className={!s.driverPage ? "on" : ""} aria-pressed={!s.driverPage} onClick={() => onChange({ ...s, driverPage: false })}>
+            قد الملصق
+          </button>
+          <button type="button" className={s.driverPage ? "on" : ""} aria-pressed={s.driverPage} onClick={() => onChange({ ...s, driverPage: true })}>
+            من الطابعة (driver)
+          </button>
+        </div>
+        <span className="field-hint">
+          «من الطابعة»: التطبيق ما كيصيفطش حجم الورقة، الملصق كيبدا من فوق الورقة اللي مختارة فإعدادات الطابعة. استعملها إلا الطابعة ما كتعرفش حجم الورقة بوحدها.
+        </span>
+      </div>
+
+      {!s.driverPage && (
+      <div className="field">
         <span>اتجاه الورقة للطابعة</span>
         <div className="segmented wide-seg" role="group" aria-label="اتجاه الورقة للطابعة">
           <button type="button" className={!s.landscape ? "on" : ""} aria-pressed={!s.landscape} onClick={() => onChange({ ...s, landscape: false })}>
@@ -147,6 +163,7 @@ export function LabelSetupPanel({
         </div>
         <span className="field-hint">جرب Paysage إلا الطابعة كتطبع الملصق مايل ولا مصغر. إلا خرج مقلوب، بدل «الدوران» لـ 180°.</span>
       </div>
+      )}
 
       <fieldset className="setup-group">
         <legend>🔲 الهوامش داخل الملصق</legend>

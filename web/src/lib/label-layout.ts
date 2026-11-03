@@ -36,6 +36,12 @@ export interface LabelSetup {
    * swapped, the stickers drawn turned 90°), for drivers that print sideways.
    */
   landscape: boolean;
+  /**
+   * Page size from the printer (driver): no size is sent, the stickers start
+   * at the top of the paper chosen in the printer's settings. For printers
+   * that don't take the page size from the app.
+   */
+  driverPage: boolean;
   /** What is printed, one line under the other, and how big (pt for text, mm for the barcode). */
   showShop: boolean;
   shopSize: number;
@@ -65,6 +71,7 @@ export const RECEIPT_PRINTER: LabelSetup = {
   rotate: 0,
   mode: "strip",
   landscape: false,
+  driverPage: false,
   showShop: false,
   shopSize: 6.5,
   showItem: true,
@@ -117,7 +124,7 @@ export function sanitizeSetup(raw: unknown): LabelSetup {
   }
   if ([0, 90, 180, 270].includes(r.rotate as number)) out.rotate = r.rotate as Rotation;
   if (r.mode === "strip" || r.mode === "pages") out.mode = r.mode;
-  for (const k of ["showShop", "showItem", "priceBold", "showDigits", "landscape"] as const) {
+  for (const k of ["showShop", "showItem", "priceBold", "showDigits", "landscape", "driverPage"] as const) {
     if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
   }
   // The margins must leave some room for the sticker's content.
@@ -150,6 +157,8 @@ export function contentSize(s: LabelSetup) {
  */
 export function pageGroups(s: LabelSetup, count: number): number[] {
   if (count <= 0) return [];
+  // Driver page: one flow from the top, the driver cuts it in its own pages.
+  if (s.driverPage && s.mode === "strip") return [count];
   const per = s.mode === "pages" ? 1 : Math.max(1, Math.min(100, Math.floor(5000 / pitch(s))));
   const out: number[] = [];
   for (let left = count; left > 0; left -= per) out.push(Math.min(per, left));
@@ -161,12 +170,16 @@ export function pageGroups(s: LabelSetup, count: number): number[] {
  * shorter last page. The page is exactly N × (h + gap) long, so the next print
  * starts on the next sticker.
  */
+/** Paysage only applies when the app sends the page size. */
+export const isLandscape = (s: LabelSetup) => s.landscape && !s.driverPage;
+
 export function pageCss(s: LabelSetup, groups: number[]): string {
+  if (s.driverPage) return "@page { margin: 0; }";
   const first = groups[0] ?? 1;
   const last = groups[groups.length - 1] ?? first;
   const size = (n: number) => {
     const p = sheetSize(s, n);
-    return s.landscape ? `${p.h}mm ${p.w}mm` : `${p.w}mm ${p.h}mm`;
+    return isLandscape(s) ? `${p.h}mm ${p.w}mm` : `${p.w}mm ${p.h}mm`;
   };
   let css = `@page { size: ${size(first)}; margin: 0; }`;
   if (last !== first) css += ` @page lbl-last { size: ${size(last)}; margin: 0; }`;

@@ -572,6 +572,8 @@ input[type="date"] { min-height: 44px; }
 .ean13-digits { font-family: monospace; font-size: 6.5pt; letter-spacing: 0.12em; margin: 0.3mm 0 0 !important; }
 
 /* One sticker in its place on the roll: a cell of (height + gap), see LabelSetup.tsx. */
+/* Stickers start at the left edge of the paper (the page is RTL); the text inside stays RTL. */
+#print-root.labels-print.roll { direction: ltr; }
 .label-sheet-turn { transform-origin: 0 0; }
 .label-slot { flex: none; overflow: hidden; }
 .labels-print.roll .label-sheet:has(.label-slot) { display: flex; }

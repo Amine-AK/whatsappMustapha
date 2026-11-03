@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ean13Modules, newShopCode, shopCodeOf, usedCodes } from "@/lib/barcode";
 import { money } from "@/lib/format";
-import { barcodeFit, contentSize, pageCss, pageGroups, sheetSize, type LabelSetup } from "@/lib/label-layout";
+import { barcodeFit, contentSize, pageCss, pageGroups, isLandscape, sheetSize, type LabelSetup } from "@/lib/label-layout";
 import { newLedgerId, nowParts, type StockItem } from "@/lib/ledger";
 import { SHOP } from "@/lib/receipt";
 import { currentSeller, searchStock } from "@/lib/shop";
@@ -105,7 +105,7 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   // sticker is turned in its own slot, side by side, so the page never splits a turned block.
   const sheetBox = (n: number): CSSProperties => {
     const p = sheetSize(setup, n);
-    return setup.landscape ? { width: `${p.h}mm`, height: `${p.w}mm` } : {};
+    return isLandscape(setup) ? { width: `${p.h}mm`, height: `${p.w}mm` } : {};
   };
   const one = sheetSize(setup, 1);
   const slotBox: CSSProperties = { width: `${one.h}mm`, height: `${one.w}mm` };
@@ -120,7 +120,7 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
       const sheet = (
         <div key={g} className="label-sheet" style={{ ...(last ? { page: "lbl-last" } : {}), ...sheetBox(n) } as CSSProperties}>
           {printed.slice(at, at + n).map((s, i) =>
-            setup.landscape ? (
+            isLandscape(setup) ? (
               <div key={at + i} className="label-slot" style={slotBox}>
                 <div className="label-sheet-turn" style={turnBox}>
                   {placed(s, at + i, calibrating)}

@@ -317,6 +317,10 @@ preview draws the sticker's edge (red dashes) and the space inside the margins.
 - **قد الملصق:** width, height, **الفراغ** (gap between two stickers, 0.1 mm
   steps) and **عرض الورقة** (paper width sent to the printer; 0 = sticker width,
   try 72 or 80 if the driver shrinks or cuts the sticker).
+- **حجم الورقة:** **قد الملصق** (default: the app sends the exact page size) or
+  **من الطابعة (driver)**: no page size is sent, the stickers start at the top
+  of the paper chosen in the printer's settings. For printers that don't take
+  the page size from the app. Paysage is hidden in this mode.
 - **اتجاه الورقة للطابعة:** **Portrait** (default) or **Paysage**: the page is
   sent in landscape (width and height swapped, stickers drawn turned 90°), for
   drivers that print the sticker sideways or shrunk. If it comes out upside
