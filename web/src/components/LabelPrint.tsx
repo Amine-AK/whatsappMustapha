@@ -8,6 +8,8 @@ import { newLedgerId, nowParts, type StockItem } from "@/lib/ledger";
 import { SHOP } from "@/lib/receipt";
 import { currentSeller, searchStock } from "@/lib/shop";
 import { Modal } from "./Modal";
+// DEV ONLY (print tests): remove with PrintTest.tsx.
+import { pageRule, PrintTestPanel, TestPage, usePrintTest } from "./PrintTest";
 import type { LedgerState } from "./useLedger";
 
 type Size = "40x30" | "50x30" | "a4";
@@ -19,6 +21,10 @@ const SIZES: { value: Size; label: string; hint: string; mm: string }[] = [
 const SIZE_KEY = "label-size";
 const PRICE_KEY = "label-price";
 const MAX_LABELS = 1000;
+/** Roll sizes in mm (width × height). */
+const ROLL: Partial<Record<Size, [number, number]>> = { "40x30": [40, 30], "50x30": [50, 30] };
+// DEV ONLY: the sticker printed by «طبع ملصق واحد للتجربة» when no product is chosen.
+const SAMPLE = { id: "TEST", item: "تجربة الطباعة 123", sellPrice: 99.5 } as StockItem;
 
 /**
  * The shop's own barcode on each product, printed as stickers: one code per
@@ -32,6 +38,10 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const [size, setSize] = useState<Size>("40x30");
   const [showPrice, setShowPrice] = useState(true);
   const [mounted, setMounted] = useState(false);
+  // DEV ONLY: orientation / position tests.
+  const [test, setTest] = usePrintTest();
+  const [testOnly, setTestOnly] = useState(false);
+  const roll = ROLL[size];
 
   useEffect(() => {
     try {
@@ -71,6 +81,27 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const chosen = stock.filter((s) => (counts[s.id] ?? 0) > 0);
   const total = chosen.reduce((t, s) => t + counts[s.id], 0);
   const labels = chosen.flatMap((s) => Array.from({ length: counts[s.id] }, () => s));
+  const codeOf = (s: StockItem) => codes.get(s.id)?.code ?? newShopCode(s.id, new Set());
+  // DEV ONLY: a test print is one sticker, nothing saved.
+  const printed = testOnly ? [labels[0] ?? stock[0] ?? SAMPLE] : labels;
+
+  function testPrint() {
+    setTestOnly(true);
+    window.addEventListener("afterprint", () => setTestOnly(false), { once: true });
+    setTimeout(() => window.print(), 50);
+  }
+
+  /** A sticker as it is printed: on a roll, in its own page, turned and shifted as set in the tests. */
+  const onPage = (s: StockItem, key?: number) => {
+    const label = <Label key={roll ? undefined : key} item={s} code={codeOf(s)} size={size} showPrice={showPrice} />;
+    return roll ? (
+      <TestPage key={key} w={roll[0]} h={roll[1]} t={test}>
+        {label}
+      </TestPage>
+    ) : (
+      label
+    );
+  };
 
   const setCount = (id: string, n: number) => setCounts((c) => ({ ...c, [id]: Math.max(0, Math.min(500, Math.floor(n) || 0)) }));
 
@@ -150,11 +181,13 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
           نطبعو الثمن على الملصق
         </label>
 
-        {labels[0] && (
+        {(labels[0] || (roll && data.me?.role === "owner")) && (
           <div className="label-preview" aria-label="شكل الملصق">
-            <Label item={labels[0]} code={codes.get(labels[0].id)!.code} size={size} showPrice={showPrice} />
+            {onPage(labels[0] ?? stock[0] ?? SAMPLE)}
           </div>
         )}
+
+        {roll && data.me?.role === "owner" && <PrintTestPanel t={test} onChange={setTest} onTestPrint={testPrint} />}
 
         <label className="visually-hidden" htmlFor="label-search">
           قلب على سلعة
@@ -207,10 +240,8 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
       {mounted &&
         createPortal(
           <div id="print-root" className={`labels-print size-${size}`}>
-            <style>{size === "a4" ? "@page { size: A4; margin: 10mm 0 0 0; }" : `@page { size: ${size.replace("x", "mm ")}mm; margin: 0; }`}</style>
-            {labels.map((s, i) => (
-              <Label key={i} item={s} code={codes.get(s.id)!.code} size={size} showPrice={showPrice} />
-            ))}
+            <style>{roll ? pageRule(roll[0], roll[1], test) : "@page { size: A4; margin: 10mm 0 0 0; }"}</style>
+            {printed.map((s, i) => onPage(s, i))}
           </div>,
           document.body,
         )}
