@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { matchesClient, money } from "@/lib/format";
-import type { ClientSummary } from "@/lib/ledger";
+import { clientPhones, type ClientSummary } from "@/lib/ledger";
 import { Modal } from "./Modal";
 
 export function Field({
@@ -119,7 +119,7 @@ export function ClientPicker({
   const [query, setQuery] = useState("");
   const chosen = summaries.find((s) => s.client.id === value);
   const results = useMemo(
-    () => (query.trim() ? summaries.filter((s) => matchesClient(s.client.name, s.client.phone, query)).slice(0, 8) : []),
+    () => (query.trim() ? summaries.filter((s) => matchesClient(s.client.name, clientPhones(s.client), query)).slice(0, 8) : []),
     [summaries, query],
   );
   return (

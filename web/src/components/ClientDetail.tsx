@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/client";
 import { dueText, money, STATUS_LABEL } from "@/lib/format";
 import { monthsToFinish, sortPayments, type ClientSummary, type Payment, type Purchase } from "@/lib/ledger";
@@ -75,6 +75,7 @@ export function ClientDetail({ data, clientId, onClose, onToast }: { data: Ledge
               </a>
             </>
           )}
+          {(c.phones ?? []).length > 0 && <MorePhones name={c.name} phones={c.phones!} />}
           {allow("client_delete") && (
           <button type="button" className="delete-mini" onClick={() => setSub({ kind: "delete-client" })} disabled={busy} aria-label={`حذف ${c.name}`} title="حذف الزبون">
             🗑️ حذف
@@ -391,5 +392,34 @@ function DeleteClient({ summary: s, onClose, onConfirm, onArchive }: { summary: 
         <p className="muted small">ما عندو حتى شراء ولا دفعة.</p>
       )}
     </Modal>
+  );
+}
+
+/** The customer's other numbers, folded behind «+N ▾»; tapping outside closes the list. */
+function MorePhones({ name, phones }: { name: string; phones: string[] }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const outside = (e: PointerEvent) => {
+      if (ref.current?.open && !ref.current.contains(e.target as Node)) ref.current.open = false;
+    };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, []);
+  return (
+    <details className="more-phones" ref={ref}>
+      <summary aria-label={`أرقام أخرى ديال ${name}`}>
+        <bdi dir="ltr">+{phones.length}</bdi> <span aria-hidden="true">▾</span>
+      </summary>
+      <ul>
+        {phones.map((p, i) => (
+          <li key={i}>
+            <a href={`tel:${p.replace(/[^\d+]/g, "")}`} aria-label={`اتصل بـ ${name} فـ ${p}`}>
+              <span dir="ltr">{p}</span>
+              <span aria-hidden="true">📞</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

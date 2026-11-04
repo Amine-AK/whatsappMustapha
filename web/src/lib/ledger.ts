@@ -12,7 +12,10 @@ import { addDays, addMonths, addPeriods, dueStatus, isISODate, isManualPeriod, n
 export interface Client {
   id: string;
   name: string;
+  /** Main number: the one used for WhatsApp. */
   phone: string;
+  /** More numbers (wife, work, other SIM…), to call or find the customer. */
+  phones?: string[];
   /** Agreed instalment in dirhams, 0 = not set. */
   installment: number;
   /** سيمانة / 15 يوم / شهر / تحديد يدوي */
@@ -201,6 +204,11 @@ export function normalizeLedger(l: Partial<Ledger> | null | undefined): Ledger {
   return { ...full, stock: full.stock.map((s) => (Array.isArray(s.codes) ? s : { ...s, codes: [] })) };
 }
 
+/** Every number of a customer: the main one first, then the others. */
+export function clientPhones(c: Pick<Client, "phone" | "phones">): string[] {
+  return [c.phone, ...(c.phones ?? [])].map((x) => x.trim()).filter(Boolean);
+}
+
 /** Every code of a product: the main one and the other suppliers'. */
 export function productCodes(s: Pick<StockItem, "serial" | "codes">): string[] {
   return [s.serial, ...(s.codes ?? [])].map((x) => x.trim()).filter(Boolean);
@@ -229,7 +237,7 @@ export const isLedgerId = (s: unknown): s is string => typeof s === "string" && 
 
 type OpBody =
   | { type: "client.add"; client: Client }
-  | { type: "client.update"; id: string; base: string; patch: Partial<Pick<Client, "name" | "phone" | "notes" | "nextDueDate">> }
+  | { type: "client.update"; id: string; base: string; patch: Partial<Pick<Client, "name" | "phone" | "phones" | "notes" | "nextDueDate">> }
   /** withHistory: also delete their purchases, payments and instalment changes (their sales are cancelled). */
   | { type: "client.delete"; id: string; withHistory?: boolean }
   | { type: "client.installment"; id: string; base: string; change: InstallmentChange; nextDueDate?: string }
@@ -290,6 +298,10 @@ function checkClient(c: Client): string | null {
   if (!isLedgerId(c.id) || !c.id.startsWith("C-")) return "رقم الزبون غير صحيح";
   if (!text(c.name, 200) || !c.name.trim()) return "الاسم ضروري";
   if (!text(c.phone, 40) || !text(c.period, 40) || !text(c.notes, 1000)) return "معلومات الزبون غير صحيحة";
+  const more = c.phones ?? [];
+  if (!Array.isArray(more) || more.length > 10 || !more.every((x) => typeof x === "string" && x.trim() !== "" && x.length <= 40 && !/[\n\r]/.test(x))) {
+    return "أرقام الهاتف الأخرى غير صحيحة";
+  }
   if (!money(c.installment)) return "مبلغ الطريطة غير صحيح";
   if (!date(c.nextDueDate) || !text(c.createdAt, 40)) return "التاريخ غير صحيح";
   return null;
@@ -391,7 +403,7 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       if (!c) return invalid(ledger, "الزبون ما بقاش");
       if (c.updatedAt === op.at) return { ledger, result: "already" };
       if (c.updatedAt !== op.base) return { ledger, result: "conflict", message: CONFLICT };
-      const next = { ...c, ...pick<Client>(op.patch, ["name", "phone", "notes", "nextDueDate"]), updatedAt: op.at };
+      const next = { ...c, ...pick<Client>(op.patch, ["name", "phone", "phones", "notes", "nextDueDate"]), updatedAt: op.at };
       const err = checkClient(next);
       if (err) return invalid(ledger, err);
       return { ledger: { ...ledger, clients: replace(ledger.clients, c.id, next) }, result: "ok" };

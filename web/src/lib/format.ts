@@ -37,10 +37,11 @@ export function searchDigits(q: string): string {
 }
 
 /** Does a customer match the search box? Name (any part) or phone in any format ("0661…", "+212 661…"). */
-export function matchesClient(name: string, phone: string, query: string): boolean {
+export function matchesClient(name: string, phone: string | string[], query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   if (name.toLowerCase().includes(q)) return true;
   const digits = searchDigits(q);
-  return digits.length >= 3 && formatMoroccoPhone(phone).includes(digits);
+  // A customer can have several numbers: any of them matches.
+  return digits.length >= 3 && (Array.isArray(phone) ? phone : [phone]).some((p) => formatMoroccoPhone(p).includes(digits));
 }

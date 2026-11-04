@@ -53,7 +53,7 @@ export type TableKey = keyof typeof TABS;
 export const HEADERS: Record<TableKey, string[]> = {
   clients: [
     "رقم الزبون", "الاسم", "الهاتف", "الطريطة", "المدة", "الدفعة المقبلة", "ملاحظات",
-    "مجموع المشتريات", "مجموع المدفوع", "المتبقي", "آخر دفعة", "تاريخ الإضافة", "آخر تعديل",
+    "مجموع المشتريات", "مجموع المدفوع", "المتبقي", "آخر دفعة", "تاريخ الإضافة", "آخر تعديل", "أرقام أخرى",
   ],
   purchases: ["رقم العملية", "رقم الزبون", "الزبون", "التاريخ", "السلعة", "ثمن البيع", "ملاحظات", "تاريخ الإضافة", "آخر تعديل"],
   payments: [
@@ -104,6 +104,7 @@ export function rowToClient(r: unknown[]): Client | null {
     notes: s(r[6]),
     createdAt: s(r[11]),
     updatedAt: s(r[12]),
+    ...(lines(r[13]).length ? { phones: lines(r[13]) } : {}),
   };
 }
 
@@ -259,7 +260,7 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
     const sum = summarizeClient(ledger, c, today);
     clients.set(c.id, [
       c.id, c.name, c.phone, money(c.installment), c.period, c.nextDueDate, c.notes,
-      sum.total, sum.paid, sum.remaining, sum.lastPaymentDate, c.createdAt, c.updatedAt,
+      sum.total, sum.paid, sum.remaining, sum.lastPaymentDate, c.createdAt, c.updatedAt, (c.phones ?? []).join("\n"),
     ]);
   }
   const purchases = new Map<string, Cell[]>(
