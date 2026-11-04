@@ -30,6 +30,62 @@ function phoneError(phone: string): string {
   return phone.trim() && !isValidPhone(formatMoroccoPhone(phone)) ? "رقم الهاتف غير صحيح" : "";
 }
 
+const MAX_PHONES = 10;
+
+/** The other numbers, kept: filled, trimmed, no repeats. */
+const cleanPhones = (list: string[]) =>
+  list.map((x) => x.trim()).filter((x, i, all) => x && all.findIndex((y) => formatMoroccoPhone(y) === formatMoroccoPhone(x)) === i);
+
+/** First problem in the other numbers, if any. */
+function phonesError(list: string[]): string {
+  const bad = list.find((x) => phoneError(x));
+  return bad ? `الرقم «${bad.trim()}» غير صحيح` : "";
+}
+
+/** The customer's other numbers: one field each, ✕ to remove, ＋ to add. */
+function PhoneList({ idPrefix, value, onChange, error }: { idPrefix: string; value: string[]; onChange: (v: string[]) => void; error?: string }) {
+  return (
+    <div className="field wide phone-list">
+      <span>أرقام أخرى</span>
+      {value.map((p, i) => (
+        <div key={i} className="phone-row">
+          <input
+            id={`${idPrefix}-${i}`}
+            type="tel"
+            inputMode="tel"
+            dir="ltr"
+            value={p}
+            aria-label={`رقم آخر ${i + 1}`}
+            onChange={(e) => onChange(value.map((x, j) => (j === i ? e.target.value : x)))}
+          />
+          <button type="button" className="btn ghost" aria-label={`حيد الرقم ${i + 1}`} onClick={() => onChange(value.filter((_, j) => j !== i))}>
+            ✕
+          </button>
+        </div>
+      ))}
+      {value.length < MAX_PHONES && (
+        <button
+          type="button"
+          className="link-btn"
+          onClick={() => {
+            onChange([...value, ""]);
+            setTimeout(() => document.getElementById(`${idPrefix}-${value.length}`)?.focus(), 0);
+          }}
+        >
+          ＋ زيد رقم آخر
+        </button>
+      )}
+      {error ? (
+        <span className="field-error" role="alert">
+          {error}
+        </span>
+      ) : (
+        <span className="field-hint">مثلا رقم المرا، الخدمة ولا شي SIM أخرى. الرقم الأول هو اللي كيتصيفط ليه الواتساب.</span>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- new customer
 
 /**
@@ -46,6 +102,7 @@ export function NewClientForm({
   onDone: (clientId: string, paymentId?: string) => void;
 }) {
   const [v, setV] = useState({ name: "", phone: "" });
+  const [phones, setPhones] = useState<string[]>([]);
   const [errors, setErrors] = useState<Errors>({});
   const [step, setStep] = useState<"info" | "ask" | "sale">("info");
   const [client, setClient] = useState<Client | null>(null);
@@ -63,12 +120,14 @@ export function NewClientForm({
     const err: Errors = {};
     if (!v.name.trim()) err.name = "الاسم ضروري";
     if (phoneError(v.phone)) err.phone = phoneError(v.phone);
+    if (phonesError(phones)) err.phones = phonesError(phones);
     setErrors(err);
     const first = Object.keys(err)[0];
-    if (first) return document.getElementById(`n-${first}`)?.focus();
+    if (first) return document.getElementById(first === "phones" ? "n-phones-0" : `n-${first}`)?.focus();
+    const more = cleanPhones(phones).filter((x) => formatMoroccoPhone(x) !== formatMoroccoPhone(v.phone));
     const at = new Date().toISOString();
     // The instalment is set with the first sale.
-    const c: Client = { id: newLedgerId("C"), name: v.name.trim(), phone: v.phone.trim(), installment: 0, period: "شهر", nextDueDate: "", notes: "", createdAt: at, updatedAt: at };
+    const c: Client = { id: newLedgerId("C"), name: v.name.trim(), phone: v.phone.trim(), ...(more.length ? { phones: more } : {}), installment: 0, period: "شهر", nextDueDate: "", notes: "", createdAt: at, updatedAt: at };
     data.run(`زبون جديد · ${c.name}`, { type: "client.add", client: c });
     setClient(c);
     // Only someone who may sell on credit is offered the sale.
@@ -142,6 +201,15 @@ export function NewClientForm({
         <Field id="n-phone" label="رقم الهاتف" error={errors.phone} hint={samePhone ? `⚠️ هاد الرقم عند: ${samePhone.client.name}` : "مثلا 0661234567"}>
           <input id="n-phone" type="tel" inputMode="tel" dir="ltr" value={v.phone} onChange={(e) => set("phone")(e.target.value)} />
         </Field>
+        <PhoneList
+          idPrefix="n-phones"
+          value={phones}
+          error={errors.phones}
+          onChange={(list) => {
+            setPhones(list);
+            setErrors((e) => ({ ...e, phones: "" }));
+          }}
+        />
       </form>
     </Modal>
   );
@@ -152,11 +220,14 @@ export function NewClientForm({
 export function ClientInfoForm({ data, summary, onClose }: { data: LedgerState; summary: ClientSummary; onClose: () => void }) {
   const c = summary.client;
   const [v, setV] = useState({ name: c.name, phone: c.phone, notes: c.notes, nextDueDate: c.nextDueDate });
+  const [phones, setPhones] = useState<string[]>(c.phones ?? []);
   const [errors, setErrors] = useState<Errors>({});
   const [confirm, setConfirm] = useState(false);
+  const more = cleanPhones(phones).filter((x) => formatMoroccoPhone(x) !== formatMoroccoPhone(v.phone));
   const changes = diff([
     ["الاسم", c.name, v.name.trim()],
     ["الهاتف", c.phone, v.phone.trim()],
+    ["أرقام أخرى", (c.phones ?? []).join(" · "), more.join(" · ")],
     ["ملاحظات", c.notes, v.notes.trim()],
     ["الدفعة المقبلة", c.nextDueDate, v.nextDueDate],
   ]);
@@ -166,6 +237,7 @@ export function ClientInfoForm({ data, summary, onClose }: { data: LedgerState; 
     const err: Errors = {};
     if (!v.name.trim()) err.name = "الاسم ضروري";
     if (phoneError(v.phone)) err.phone = phoneError(v.phone);
+    if (phonesError(phones)) err.phones = phonesError(phones);
     setErrors(err);
     if (Object.keys(err).length) return;
     if (!changes.length) return onClose();
@@ -177,7 +249,7 @@ export function ClientInfoForm({ data, summary, onClose }: { data: LedgerState; 
       type: "client.update",
       id: c.id,
       base: c.updatedAt,
-      patch: { name: v.name.trim(), phone: v.phone.trim(), notes: v.notes.trim(), nextDueDate: v.nextDueDate },
+      patch: { name: v.name.trim(), phone: v.phone.trim(), phones: more, notes: v.notes.trim(), nextDueDate: v.nextDueDate },
     });
     onClose();
   }
@@ -228,6 +300,15 @@ export function ClientInfoForm({ data, summary, onClose }: { data: LedgerState; 
         <Field id="ci-phone" label="رقم الهاتف" error={errors.phone}>
           <input id="ci-phone" type="tel" dir="ltr" value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} />
         </Field>
+        <PhoneList
+          idPrefix="ci-phones"
+          value={phones}
+          error={errors.phones}
+          onChange={(list) => {
+            setPhones(list);
+            setErrors((e) => ({ ...e, phones: "" }));
+          }}
+        />
         <Field id="ci-next" label="الدفعة المقبلة">
           <input id="ci-next" type="date" value={v.nextDueDate} onChange={(e) => setV({ ...v, nextDueDate: e.target.value })} />
         </Field>

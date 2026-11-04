@@ -35,12 +35,18 @@ The app works in these tabs (it creates them; see *First start* below):
 
 | Tab | One row per |
 |---|---|
-| `الزبناء` | customer: number (C-…), name, phone, instalment, period, next payment date, notes, and the totals bought / paid / remaining (written by the app) |
+| `الزبناء` | customer: number (C-…), name, phone, instalment, period, next payment date, notes, the totals bought / paid / remaining (written by the app), and «أرقام أخرى»: the customer's other numbers, one per line |
 | `المشتريات` | purchase: customer, date, item, selling price (the buying price will live in the future stock section) |
 | `الدفعات` | payment: receipt number (P-…), customer, date, time, amount, تسبيق/دفعة, item |
 | `تغييرات الطريطة` | instalment change: old and new amount and period, reason |
 | `أرشيف الزبناء`, `أرشيف المشتريات`, `أرشيف الدفعات` | archived customers and their history |
 | `سجل التذكيرات` | WhatsApp reminder sent |
+
+**Several phone numbers:** a customer has one main number («الهاتف», the one
+WhatsApp messages and reminders go to) and up to 10 others («أرقام أخرى»), added
+with **＋ زيد رقم آخر** when creating or editing the customer. Searching finds a
+customer by any of their numbers, and each number has its own 📞 button in the
+account. Older sheets get the «أرقام أخرى» column title on their own.
 
 Customers, purchases and payments are linked by their numbers (`C-…`, `S-…`,
 `P-…`), so moving or sorting rows by hand doesn't break anything. You can read

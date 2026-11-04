@@ -938,6 +938,13 @@ a.btn { text-decoration: none; }
   font-size: 13px; font-weight: 600; text-decoration: none;
 }
 .call-mini:hover { background: var(--accent); color: #fff; }
+/* A customer's other numbers. */
+.more-phone { display: inline-flex; align-items: center; gap: 6px; }
+.phone-list { display: grid; gap: 6px; }
+.phone-row { display: flex; gap: 6px; }
+.phone-row input { flex: 1; min-width: 0; }
+.phone-row .btn { flex: none; width: 44px; padding: 0; }
+.phone-list .link-btn { justify-self: start; }
 
 /* Next due date typed by hand outside the rules: allowed, but very visible. */
 .due-warning {
