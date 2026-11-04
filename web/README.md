@@ -45,8 +45,9 @@ The app works in these tabs (it creates them; see *First start* below):
 **Several phone numbers:** a customer has one main number («الهاتف», the one
 WhatsApp messages and reminders go to) and up to 10 others («أرقام أخرى»), added
 with **＋ زيد رقم آخر** when creating or editing the customer. Searching finds a
-customer by any of their numbers, and each number has its own 📞 button in the
-account. Older sheets get the «أرقام أخرى» column title on their own.
+customer by any of their numbers. In the account, the other numbers are folded
+behind a small «+N ▾» button next to the main number; tap it to see them and
+call one. Older sheets get the «أرقام أخرى» column title on their own.
 
 Customers, purchases and payments are linked by their numbers (`C-…`, `S-…`,
 `P-…`), so moving or sorting rows by hand doesn't break anything. You can read

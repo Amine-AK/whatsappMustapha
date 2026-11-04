@@ -547,7 +547,7 @@ function ClientCard({ s, today, onOpen, onPay }: { s: ClientSummary; today: stri
             {c.phone && (
               <span className="phone" dir="ltr">
                 {c.phone}
-                {c.phones?.length ? <span className="muted small"> +{c.phones.length}</span> : null}
+                {c.phones?.length ? <span className="muted small"> <bdi dir="ltr">+{c.phones.length}</bdi></span> : null}
               </span>
             )}
           </div>
