@@ -1,6 +1,6 @@
 import "server-only";
 import { env } from "./env";
-import { applyOp, emptyLedger, summarize, type Ledger, type LedgerOp, type OpResult } from "./ledger";
+import { applyOp, clientPhones, emptyLedger, summarize, type Ledger, type LedgerOp, type OpResult } from "./ledger";
 import { ARCHIVE_TABS, DEFAULT_CATEGORIES, HEADERS, ledgerToRows, migrateOldRows, rowsToLedger, sameRow, SHOP_KEYS, TABS, type TableKey } from "./ledger-sheet";
 import { matchesClient } from "./format";
 import { appendRows, deleteRows, ensureTabs, findTab, listTabs, readHeaders, readIds, readTables, updateRows, type Cell } from "./sheets";
@@ -25,11 +25,16 @@ async function ensureShopTabs(): Promise<void> {
   if (!headersChecked) {
     // Tabs made by an older version: add the column titles that came later
     // (e.g. «الأيقونة» in الفئات). Once per server start.
-    const present = SHOP_KEYS.filter((k) => have.has(TABS[k]));
-    const rows = await readHeaders(present.map((k) => TABS[k]));
-    const fixes = present
-      .filter((k) => HEADERS[k].some((h, i) => rows[TABS[k]][i] !== h))
-      .map((k) => ({ title: TABS[k], row: 1, values: HEADERS[k] as Cell[] }));
+    // Also the customer tabs (e.g. «أرقام أخرى»), live and archived.
+    const tabs = [
+      ...SHOP_KEYS.map((k) => ({ title: TABS[k] as string, header: HEADERS[k] })),
+      { title: TABS.clients, header: HEADERS.clients },
+      { title: ARCHIVE_TABS.clients, header: HEADERS.clients },
+    ].filter((t) => have.has(t.title));
+    const rows = await readHeaders(tabs.map((t) => t.title));
+    const fixes = tabs
+      .filter((t) => t.header.some((h, i) => rows[t.title]?.[i] !== h))
+      .map((t) => ({ title: t.title, row: 1, values: t.header as Cell[] }));
     await updateRows(fixes);
     headersChecked = true;
   }
@@ -186,7 +191,7 @@ async function loadArchive(): Promise<{ ledger: Ledger; raw: Record<ArchiveKey, 
 /** Archived customers whose name or phone matches (at most 50). */
 export async function searchArchive(query: string): Promise<Ledger> {
   const { ledger } = await loadArchive();
-  const found = ledger.clients.filter((c) => matchesClient(c.name, c.phone, query)).slice(0, 50);
+  const found = ledger.clients.filter((c) => matchesClient(c.name, clientPhones(c), query)).slice(0, 50);
   const ids = new Set(found.map((c) => c.id));
   return {
     ...emptyLedger(),

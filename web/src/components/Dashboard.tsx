@@ -6,7 +6,7 @@ import { idbClearLedger } from "@/lib/idb";
 import { can, ROLE_LABEL, type Me } from "@/lib/roles";
 import { backupDue } from "@/lib/backup";
 import { dueText, matchesClient, money, STATUS_LABEL } from "@/lib/format";
-import { unpaidItems, type ClientSummary } from "@/lib/ledger";
+import { clientPhones, unpaidItems, type ClientSummary } from "@/lib/ledger";
 import { displayDate, installmentText } from "@/lib/receipt";
 import type { DueStatus } from "@/lib/sheet-logic";
 import { ArchiveView } from "./ArchiveView";
@@ -158,7 +158,7 @@ export function Dashboard() {
       if (f.scope === "owing" && s.remaining <= 0) return false;
       if (f.scope === "paid-up" && s.remaining > 0) return false;
       if (!["owing", "paid-up", "all", "archive"].includes(f.scope) && s.status !== f.scope) return false;
-      if (!matchesClient(s.client.name, s.client.phone, query)) return false;
+      if (!matchesClient(s.client.name, clientPhones(s.client), query)) return false;
       if (f.from && (!s.client.nextDueDate || s.client.nextDueDate < f.from)) return false;
       if (f.to && (!s.client.nextDueDate || s.client.nextDueDate > f.to)) return false;
       if (s.remaining < min || s.remaining > max) return false;
@@ -547,6 +547,7 @@ function ClientCard({ s, today, onOpen, onPay }: { s: ClientSummary; today: stri
             {c.phone && (
               <span className="phone" dir="ltr">
                 {c.phone}
+                {c.phones?.length ? <span className="muted small"> <bdi dir="ltr">+{c.phones.length}</bdi></span> : null}
               </span>
             )}
           </div>

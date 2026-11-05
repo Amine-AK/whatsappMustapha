@@ -13,10 +13,12 @@ import {
   type LedgerOp,
   type Payment,
   type Purchase,
+  clientPhones,
   latestNextDue,
   suggestNextDue,
 } from "./ledger";
-import { ledgerToRows, migrateOldRows, rowsToLedger, sameRow, TABS } from "./ledger-sheet";
+import { HEADERS, ledgerToRows, migrateOldRows, rowsToLedger, sameRow, TABS } from "./ledger-sheet";
+import { matchesClient } from "./format";
 import { paymentMessage, paymentReceipt, statement, statementMessage, whatsappLink } from "./receipt";
 
 const T0 = "2026-01-10T10:00:00.000Z";
@@ -261,6 +263,29 @@ describe("sheet layout", () => {
     expect(rows.payments.get("P-PAY00005")![8]).toBe("ماشينة الصابون");
     expect(sameRow(["P-1", "500"], ["P-1", 500])).toBe(true);
     expect(TABS.clients).toBe("الزبناء");
+  });
+
+  it("keeps a customer's other numbers in their own column", () => {
+    const start = example();
+    const base = start.clients.find((c) => c.id === client.id)!.updatedAt;
+    const done = applyOp(start, op({ type: "client.update", id: client.id, base, patch: { phones: ["0662000000", "0522 11 22 33"] } }));
+    expect(done.result).toBe("ok");
+    const l = done.ledger;
+    const row = ledgerToRows(l, "2026-04-20").clients.get(client.id)!;
+    expect(HEADERS.clients[13]).toBe("أرقام أخرى");
+    expect(row[13]).toBe("0662000000\n0522 11 22 33");
+    const back = rowsToLedger({ clients: [row], purchases: [], payments: [], changes: [] }).clients[0];
+    expect(back.phones).toEqual(["0662000000", "0522 11 22 33"]);
+    expect(clientPhones(back)).toEqual(["0661234567", "0662000000", "0522 11 22 33"]);
+    // Bad lists are refused.
+    expect(applyOp(start, op({ type: "client.update", id: client.id, base, patch: { phones: ["a\nb"] } })).result).toBe("invalid");
+    expect(applyOp(start, op({ type: "client.update", id: client.id, base, patch: { phones: Array(11).fill("0661") } })).result).toBe("invalid");
+  });
+
+  it("finds a customer by any of their numbers", () => {
+    expect(matchesClient("Ahmed", ["0661234567", "0662998877"], "998877")).toBe(true);
+    expect(matchesClient("Ahmed", ["0661234567"], "998877")).toBe(false);
+    expect(matchesClient("Ahmed", "0661234567", "234567")).toBe(true);
   });
 
   it("reads dates and times typed by hand in the sheet", () => {

@@ -7,7 +7,7 @@ import { itemStatuses, sortPayments, type ClientSummary, type Payment } from "./
 
 export const SHOP = {
   name: "ELECTRO-LMESTOUR",
-  phone: "0663336760",
+  phone: "0662275062",
   thanks: "شكراً على ثقتكم",
 };
 
