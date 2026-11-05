@@ -311,6 +311,22 @@ different suppliers carries one label with one name and one price.
   203 dpi printer, so it prints evenly on small stickers.
 - After changing a price, print new stickers for the units on the shelf.
 
+### New product, new number, barcode image
+
+- **New product without any code:** pressing **زيد** asks «🏷️ ما زدتيش باركود»:
+  **صاوب باركود** (saves it with a shop barcode), **🖨️ صاوب باركود وطبع
+  الملصقات دابا** (same, then opens the sticker window with it ticked), or
+  **لا، بلا باركود**.
+- **In the product form**, under the codes: **🏷️ صاوب باركود ديال المحل** puts
+  a shop barcode in the codes; once there, **🔄 رقم جديد للباركود** swaps it for
+  another random number (as many times as you like, saved with **حفظ**), and
+  **⬇️ تحميل الباركود (صورة)** downloads it as a PNG (name, price, bars and digits).
+- **In the sticker window**, each product has **🔄** (new number, saved when
+  printing) and **⬇️** (PNG image). A new number on a product that already had
+  a shop barcode replaces it: its old stickers no longer scan, print new ones.
+- The image file is named `<latin part of the name>-<code>.png`
+  (`barcode-<code>.png` for an Arabic name: some browsers drop Arabic file names).
+
 ### ⚙️ ضبط الطابعة (printer setup)
 
 Under the preview, saved on each device (each PC has its own printer). The
