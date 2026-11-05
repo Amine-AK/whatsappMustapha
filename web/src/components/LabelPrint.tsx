@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ean13Modules, newShopCode, shopCodeOf, usedCodes } from "@/lib/barcode";
+import { ean13Modules, freshShopCode, newShopCode, shopCodeOf, usedCodes, withShopCode } from "@/lib/barcode";
+import { downloadBarcodePng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
-import { barcodeFit, contentSize, pageCss, pageGroups, type LabelSetup } from "@/lib/label-layout";
-import { newLedgerId, nowParts, type StockItem } from "@/lib/ledger";
+import { barcodeFit, contentSize, pageCss, pageGroups, isLandscape, sheetSize, type LabelSetup } from "@/lib/label-layout";
+import { newLedgerId, nowParts, productCodes, type StockItem } from "@/lib/ledger";
 import { SHOP } from "@/lib/receipt";
 import { currentSeller, searchStock } from "@/lib/shop";
 import { Modal } from "./Modal";
@@ -58,13 +59,18 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
     } catch {}
   };
 
+  // «🔄 رقم جديد»: product id → the new number chosen here, saved when printing.
+  const [renumbered, setRenumbered] = useState<Record<string, string>>({});
   // The code each product prints with: its shop code, or the one it will get.
   const codes = useMemo(() => {
     const taken = usedCodes(stock);
-    const out = new Map<string, { code: string; isNew: boolean }>();
+    for (const c of Object.values(renumbered)) taken.add(c);
+    const out = new Map<string, { code: string; isNew: boolean; replaces?: string }>();
     for (const s of stock) {
       const have = shopCodeOf(s);
-      if (have) out.set(s.id, { code: have, isNew: false });
+      const fresh = renumbered[s.id];
+      if (fresh) out.set(s.id, { code: fresh, isNew: true, replaces: have });
+      else if (have) out.set(s.id, { code: have, isNew: false });
       else {
         const code = newShopCode(s.id, taken);
         taken.add(code);
@@ -72,7 +78,13 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
       }
     }
     return out;
-  }, [stock]);
+  }, [stock, renumbered]);
+
+  function renumber(s: StockItem) {
+    const taken = usedCodes(stock);
+    for (const c of codes.values()) taken.add(c.code.toLowerCase());
+    setRenumbered((r) => ({ ...r, [s.id]: freshShopCode(taken) }));
+  }
 
   const list = useMemo(
     () => (query.trim() ? searchStock(stock, query, 200) : [...stock].sort((a, b) => a.item.localeCompare(b.item, "ar"))).slice(0, 200),
@@ -101,6 +113,16 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
       <Label key={key} item={s} code={codeOf(s)} showPrice={showPrice} />
     );
 
+  // Paysage: the roll layout turned 90° (counter-clockwise) into a landscape page. Each
+  // sticker is turned in its own slot, side by side, so the page never splits a turned block.
+  const sheetBox = (n: number): CSSProperties => {
+    const p = sheetSize(setup, n);
+    return isLandscape(setup) ? { width: `${p.h}mm`, height: `${p.w}mm` } : {};
+  };
+  const one = sheetSize(setup, 1);
+  const slotBox: CSSProperties = { width: `${one.h}mm`, height: `${one.w}mm` };
+  const turnBox: CSSProperties = { width: `${one.w}mm`, height: `${one.h}mm`, transform: `translateY(${one.w}mm) rotate(-90deg)` };
+
   /** The stickers as printed: on a roll, N per page (strip) or one per page. */
   function printPages() {
     if (!roll) return printed.map((s, i) => placed(s, i));
@@ -108,8 +130,18 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
     return groups.map((n, g) => {
       const last = g === groups.length - 1 && n !== groups[0];
       const sheet = (
-        <div key={g} className="label-sheet" style={last ? ({ page: "lbl-last" } as CSSProperties) : undefined}>
-          {printed.slice(at, at + n).map((s, i) => placed(s, at + i, calibrating))}
+        <div key={g} className="label-sheet" style={{ ...(last ? { page: "lbl-last" } : {}), ...sheetBox(n) } as CSSProperties}>
+          {printed.slice(at, at + n).map((s, i) =>
+            isLandscape(setup) ? (
+              <div key={at + i} className="label-slot" style={slotBox}>
+                <div className="label-sheet-turn" style={turnBox}>
+                  {placed(s, at + i, calibrating)}
+                </div>
+              </div>
+            ) : (
+              placed(s, at + i, calibrating)
+            ),
+          )}
         </div>
       );
       at += n;
@@ -123,6 +155,13 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
     // Products printed for the first time get their code saved (a move of 0 units that adds the code).
     const fresh = chosen.filter((s) => codes.get(s.id)?.isNew);
     for (const s of fresh) {
+      const c = codes.get(s.id)!;
+      // A new number in place of the product's old shop code.
+      if (c.replaces) {
+        const list = withShopCode(productCodes(s), c.code);
+        data.run(`رقم جديد للباركود · ${s.item}`, { type: "stock.update", id: s.id, base: s.updatedAt, patch: { serial: list[0] ?? "", codes: list.slice(1) } });
+        continue;
+      }
       data.run(`باركود المحل · ${s.item}`, {
         type: "stock.adjust",
         move: {
@@ -138,6 +177,7 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
       });
     }
     if (fresh.length) onToast(`تسجل الباركود ديال ${fresh.length} سلعة`);
+    setRenumbered({});
     // Let React put the labels in the page before the print window opens.
     setTimeout(() => window.print(), 50);
   }
@@ -270,8 +310,21 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
                       {money(s.sellPrice)} · <bdi dir="ltr">{c.code}</bdi>
                       {c.isNew ? " · جديد" : ""}
                     </span>
+                    {c.replaces && <span className="small warn-text">رقم جديد: الملصقات القديمة ما غاديش يبقاو يتسكانا</span>}
                   </span>
                 </label>
+                <button type="button" className="btn ghost icon-btn" onClick={() => renumber(s)} title="رقم جديد للباركود" aria-label={`رقم جديد للباركود ديال ${s.item}`}>
+                  🔄
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost icon-btn"
+                  onClick={() => void downloadBarcodePng(c.code, { name: s.item, price: showPrice ? money(s.sellPrice) : undefined })}
+                  title="تحميل الباركود (صورة)"
+                  aria-label={`تحميل الباركود ديال ${s.item} كصورة`}
+                >
+                  ⬇️
+                </button>
                 {n > 0 && (
                   <input
                     type="number"

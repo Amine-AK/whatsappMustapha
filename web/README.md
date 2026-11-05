@@ -139,6 +139,16 @@ was set up before them):
   the phone camera and with a PC webcam: phones use the browser's built-in
   reader; PCs and iPhones download a reader (`@zxing/library`, ~450 KB) the
   first time the scanner opens. The code can also be typed.
+- **Camera scanning, one after the other:** the camera opens once and keeps
+  reading until **✓ ساليت (N)**. Each read beeps: high = good, low double =
+  not good (unknown in a sale, already in the list, used by another product),
+  and the phone vibrates. The last codes read are listed under the camera.
+  - البيع: each code adds its product (same code again = +1).
+  - Product form 📷: each code goes on its own line.
+  - المخزون 📷: the camera waits behind the window a code opens (quantity /
+    new product) and reads again when it is closed.
+  - A code held in front of the camera is read once; the same code is read
+    again after it has been out of view for 1.5 s (e.g. the next unit).
 - **USB / Bluetooth barcode scanner:** no need to click anything first. In
   البيع a scan puts the product in the sale (scan twice = quantity 2); in
   المخزون it asks «شحال وصلات منها؟» for a known product or opens «سلعة جديدة»
@@ -311,6 +321,22 @@ different suppliers carries one label with one name and one price.
   203 dpi printer, so it prints evenly on small stickers.
 - After changing a price, print new stickers for the units on the shelf.
 
+### New product, new number, barcode image
+
+- **New product without any code:** pressing **زيد** asks «🏷️ ما زدتيش باركود»:
+  **صاوب باركود** (saves it with a shop barcode), **🖨️ صاوب باركود وطبع
+  الملصقات دابا** (same, then opens the sticker window with it ticked), or
+  **لا، بلا باركود**.
+- **In the product form**, under the codes: **🏷️ صاوب باركود ديال المحل** puts
+  a shop barcode in the codes; once there, **🔄 رقم جديد للباركود** swaps it for
+  another random number (as many times as you like, saved with **حفظ**), and
+  **⬇️ تحميل الباركود (صورة)** downloads it as a PNG (name, price, bars and digits).
+- **In the sticker window**, each product has **🔄** (new number, saved when
+  printing) and **⬇️** (PNG image). A new number on a product that already had
+  a shop barcode replaces it: its old stickers no longer scan, print new ones.
+- The image file is named `<latin part of the name>-<code>.png`
+  (`barcode-<code>.png` for an Arabic name: some browsers drop Arabic file names).
+
 ### ⚙️ ضبط الطابعة (printer setup)
 
 Under the preview, saved on each device (each PC has its own printer). The
@@ -324,6 +350,14 @@ preview draws the sticker's edge (red dashes) and the space inside the margins.
 - **قد الملصق:** width, height, **الفراغ** (gap between two stickers, 0.1 mm
   steps) and **عرض الورقة** (paper width sent to the printer; 0 = sticker width,
   try 72 or 80 if the driver shrinks or cuts the sticker).
+- **حجم الورقة:** **قد الملصق** (default: the app sends the exact page size) or
+  **من الطابعة (driver)**: no page size is sent, the stickers start at the top
+  of the paper chosen in the printer's settings. For printers that don't take
+  the page size from the app. Paysage is hidden in this mode.
+- **اتجاه الورقة للطابعة:** **Portrait** (default) or **Paysage**: the page is
+  sent in landscape (width and height swapped, stickers drawn turned 90°), for
+  drivers that print the sticker sideways or shrunk. If it comes out upside
+  down, set **الدوران** to 180°.
 - **الهوامش:** empty space inside the sticker: top (header), bottom (footer), right, left.
 - **التحريك:** moves the whole sticker right/left and down/up.
 - **شنو نطبعو:** tick each line to print, top to bottom: shop name (off by

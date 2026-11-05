@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ean13Check, ean13Modules, isEan13, isShopCode, newShopCode, shopCodeOf } from "./barcode";
+import { ean13Check, ean13Modules, freshShopCode, isEan13, isShopCode, newShopCode, shopCodeOf, withShopCode } from "./barcode";
 
 describe("shop barcodes", () => {
   it("computes EAN-13 check digits", () => {
@@ -33,5 +33,25 @@ describe("shop barcodes", () => {
     expect(m.slice(45, 50)).toBe("01010");
     // Known start of 4006381333931 (parity LGLLGG): 0 in L, 0 in G.
     expect(m.slice(3, 17)).toBe("0001101" + "0100111");
+  });
+
+  it("makes a new random shop code on demand, never one already taken", () => {
+    const a = freshShopCode(new Set());
+    expect(isShopCode(a)).toBe(true);
+    let n = 0;
+    const steps = [0.1, 0.2, 0.1, 0.2, 0.3, 0.4];
+    const taken = new Set([freshShopCode(new Set(), () => steps[n++ % 2])]);
+    n = 0;
+    const b = freshShopCode(taken, () => steps[n++]);
+    expect(taken.has(b)).toBe(false);
+    expect(isShopCode(b)).toBe(true);
+  });
+
+  it("swaps only the shop code of a product", () => {
+    const old = newShopCode("I-1", new Set());
+    const fresh = newShopCode("I-2", new Set());
+    expect(withShopCode(["SN123", old, "QR9"], fresh)).toEqual(["SN123", fresh, "QR9"]);
+    expect(withShopCode(["SN123"], fresh)).toEqual(["SN123", fresh]);
+    expect(withShopCode([], fresh)).toEqual([fresh]);
   });
 });

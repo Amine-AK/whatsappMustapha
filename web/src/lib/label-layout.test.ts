@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barcodeFit, contentBox, contentSize, DEFAULT_SETUP, pageCss, pageGroups, paperWidth, pitch, sanitizeSetup } from "./label-layout";
+import { isLandscape, barcodeFit, contentBox, contentSize, DEFAULT_SETUP, pageCss, pageGroups, paperWidth, pitch, sanitizeSetup } from "./label-layout";
 
 describe("sticker layout", () => {
   it("places stickers every h + gap mm", () => {
@@ -17,6 +17,19 @@ describe("sticker layout", () => {
     const s = sanitizeSetup({ h: 40, gap: 3, mode: "strip" });
     expect(pageGroups(s, 250)).toEqual([100, 100, 50]);
     expect(pageCss(s, [100, 100, 50])).toContain("@page lbl-last { size: 50mm 2150mm;");
+  });
+
+  it("swaps the page for paysage", () => {
+    const s = sanitizeSetup({ landscape: true, gap: 3 });
+    expect(s.landscape).toBe(true);
+    expect(pageCss(s, [2])).toBe("@page { size: 86mm 50mm; margin: 0; }");
+  });
+
+  it("lets the printer driver choose the page size", () => {
+    const s = sanitizeSetup({ driverPage: true, landscape: true });
+    expect(pageCss(s, [12])).toBe("@page { margin: 0; }");
+    expect(pageGroups(s, 250)).toEqual([250]);
+    expect(isLandscape(s)).toBe(false);
   });
 
   it("prints one page per sticker for label printers", () => {

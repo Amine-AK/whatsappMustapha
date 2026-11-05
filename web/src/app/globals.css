@@ -546,6 +546,8 @@ input[type="date"] { min-height: 44px; }
 .label-name { display: grid; min-width: 0; }
 .label-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .label-count { width: 72px; flex: none; text-align: center; }
+.label-list .icon-btn { flex: none; min-height: 36px; min-width: 36px; padding: 0; font-size: 16px; }
+.code-tools { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 
 /* The sticker itself: black on white, sizes in mm for the printer. */
 .label {
@@ -572,6 +574,11 @@ input[type="date"] { min-height: 44px; }
 .ean13-digits { font-family: monospace; font-size: 6.5pt; letter-spacing: 0.12em; margin: 0.3mm 0 0 !important; }
 
 /* One sticker in its place on the roll: a cell of (height + gap), see LabelSetup.tsx. */
+/* Stickers start at the left edge of the paper (the page is RTL); the text inside stays RTL. */
+#print-root.labels-print.roll { direction: ltr; }
+.label-sheet-turn { transform-origin: 0 0; }
+.label-slot { flex: none; overflow: hidden; }
+.labels-print.roll .label-sheet:has(.label-slot) { display: flex; }
 .label-cell { position: relative; overflow: hidden; background: #fff; }
 .label-content { position: absolute; }
 .label-turn { position: absolute; left: 50%; top: 50%; }
@@ -605,6 +612,7 @@ input[type="date"] { min-height: 44px; }
   .labels-print.roll .label-sheet { break-after: page; page-break-after: always; }
   .labels-print.roll .label-sheet:last-child { break-after: auto; page-break-after: auto; }
   .labels-print.roll .label-cell { break-inside: avoid; }
+  .labels-print.roll .label-sheet { overflow: hidden; }
   #print-root.labels-print.size-a4 { display: grid; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37mm; }
   .labels-print.size-a4 .label { break-after: auto; page-break-after: auto; break-inside: avoid; }
 }
@@ -897,6 +905,12 @@ a.btn { text-decoration: none; }
 }
 .scanner-help { position: absolute; inset-inline: 0; bottom: 10px; text-align: center; color: #fff; font-size: 14px; text-shadow: 0 1px 3px #000; }
 .scanner-type { display: grid; gap: 6px; }
+.scan-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.scan-history li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 14px; background: var(--surface-2); }
+.scan-history li:first-child { font-weight: 600; }
+.scan-history li.ok > span:first-child { color: var(--accent); }
+.scan-history li.bad { background: var(--danger-soft); color: var(--danger); }
+.scan-history .scan-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------------------------------------------------------------- category icons */
 

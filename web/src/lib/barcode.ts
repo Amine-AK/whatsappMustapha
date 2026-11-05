@@ -60,3 +60,22 @@ export function ean13Modules(code: string): string {
   for (let i = 7; i <= 12; i++) out += R[d[i]];
   return out + "101";
 }
+
+/**
+ * Another shop code, random this time: for «رقم جديد» when the one made from
+ * the product's id is not wanted. `taken` skips codes already used.
+ */
+export function freshShopCode(taken: Set<string>, random: () => number = Math.random): string {
+  for (;;) {
+    const seed = `R${Math.floor(random() * 1e12)}-${Math.floor(random() * 1e12)}`;
+    const code = newShopCode(seed, new Set());
+    if (!taken.has(code.toLowerCase())) return code;
+  }
+}
+
+/** The product's codes with its shop code swapped for `fresh` (added at the end if it had none). */
+export function withShopCode(codes: string[], fresh: string): string[] {
+  const at = codes.findIndex(isShopCode);
+  if (at < 0) return [...codes, fresh];
+  return codes.map((c, i) => (i === at ? fresh : c));
+}

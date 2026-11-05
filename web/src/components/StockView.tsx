@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState, type FormEvent } from "react";
+import { freshShopCode, isShopCode, newShopCode, shopCodeOf as shopCodeOfItem, usedCodes } from "@/lib/barcode";
+import { downloadBarcodePng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
 import { CONDITIONS, newLedgerId, nowParts, productCodes, type Condition, type StockItem } from "@/lib/ledger";
 import { displayDate } from "@/lib/receipt";
@@ -26,7 +28,6 @@ type Sub =
   | { kind: "adjust"; item: StockItem; scanned?: boolean; newCode?: string }
   | { kind: "unknown-code"; code: string }
   | { kind: "delete"; item: StockItem }
-  | { kind: "scan" }
   | { kind: "categories" }
   | { kind: "labels"; item?: StockItem }
   | { kind: "category"; name?: string }
@@ -38,6 +39,8 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const [category, setCategory] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
   const [sub, setSub] = useState<Sub>(null);
+  // The camera stays open behind the windows a scan opens, and reads again when they close.
+  const [scanOpen, setScanOpen] = useState(false);
 
   const viewRef = useRef<HTMLDivElement>(null);
   const fullStock = can(data.me, "stock");
@@ -92,7 +95,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         <button type="button" className="btn" onClick={() => setSub({ kind: "categories" })}>
           🗂️ الفئات
         </button>
-        <button type="button" className="btn" onClick={() => setSub({ kind: "scan" })}>
+        <button type="button" className="btn" onClick={() => setScanOpen(true)}>
           📷 سكاني
         </button>
         <button type="button" className="btn" onClick={() => setSub({ kind: "labels" })}>
@@ -183,9 +186,9 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           onClose={() => setSub(null)}
           onDelete={sub.kind === "edit" ? () => setSub({ kind: "delete", item: sub.item }) : undefined}
           onLabels={sub.kind === "edit" ? () => setSub({ kind: "labels", item: sub.item }) : undefined}
-          onSaved={(msg) => {
+          onSaved={(msg, printItem) => {
             onToast(msg);
-            setSub(null);
+            setSub(printItem ? { kind: "labels", item: printItem } : null);
           }}
         />
       )}
@@ -200,11 +203,17 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         />
       )}
       {sub?.kind === "labels" && <LabelPrint data={data} preselect={sub.item} onClose={() => setSub(null)} onToast={onToast} />}
-      {sub?.kind === "scan" && (
+      {scanOpen && (
         <BarcodeScanner
           title="📷 سكاني السلعة"
-          onClose={() => setSub(null)}
-          onResult={scanned}
+          continuous
+          paused={sub !== null}
+          onClose={() => setScanOpen(false)}
+          onResult={(code) => {
+            const found = findByCode(ledger.stock, code);
+            scanned(code);
+            return found ? { ok: true, text: found.item } : { ok: false, text: "كود جديد" };
+          }}
         />
       )}
       {sub?.kind === "categories" && (
@@ -282,12 +291,17 @@ function StockForm({
   /** Scanned before opening the form. */
   code?: string;
   onClose: () => void;
-  onSaved: (msg: string) => void;
+  /** `printItem`: open the sticker window for this new product. */
+  onSaved: (msg: string, printItem?: StockItem) => void;
   onDelete?: () => void;
   /** Print the shop's barcode stickers for this product. */
   onLabels?: () => void;
 }) {
   const ledger = data.ledger!;
+  // The new product's id, known before saving so its shop barcode can be made from it.
+  const [newId] = useState(() => newLedgerId("I"));
+  // A new product saved without any code: ask to make the shop's barcode first.
+  const [askBarcode, setAskBarcode] = useState(false);
   const [v, setV] = useState({
     item: item?.item ?? "",
     category: item?.category ?? ledger.categories[0]?.name ?? "",
@@ -328,18 +342,35 @@ function StockForm({
     if (sameCode) err.codes = `الكود «${sameCode.c}» مستعمل ديجا فـ «${sameCode.other!.item}»`;
     setErrors(err);
     if (Object.keys(err).length) return;
-    const ops: Parameters<LedgerState["run"]>[1][] = [];
+    if (!item && !codeList.length) return setAskBarcode(true);
+    save(codeList);
+  }
+
+  /** Saves the product with these codes; `print` opens its stickers after a new product. */
+  function save(codes: string[], print = false) {
+    const sell = parseAmount(v.sellPrice || String(suggested || ""));
     const at = new Date().toISOString();
-    const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: codeList[0] ?? "", codes: codeList.slice(1), notes: v.notes.trim() };
+    const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: codes[0] ?? "", codes: codes.slice(1), notes: v.notes.trim() };
     if (item) {
-      ops.push({ type: "stock.update", id: item.id, base: item.updatedAt, patch: fields });
-      data.run(`تعديل سلعة · ${fields.item}`, ...ops);
+      data.run(`تعديل سلعة · ${fields.item}`, { type: "stock.update", id: item.id, base: item.updatedAt, patch: fields });
       return onSaved("تبدلات السلعة");
     }
-    ops.push({ type: "stock.add", item: { id: newLedgerId("I"), ...fields, quantity: qty, createdAt: at, updatedAt: at } });
-    data.run(`سلعة جديدة · ${fields.item}`, ...ops);
-    onSaved("تزادت السلعة فالمخزون");
+    const added: StockItem = { id: newId, ...fields, quantity: Number(v.quantity), createdAt: at, updatedAt: at };
+    data.run(`سلعة جديدة · ${fields.item}`, { type: "stock.add", item: added });
+    onSaved(codes.some(isShopCode) ? "تزادت السلعة بالباركود ديال المحل" : "تزادت السلعة فالمخزون", print ? added : undefined);
   }
+
+  // The shop barcode in the codes box, if any; «باركود جديد» puts one there (or a new number in its place).
+  const taken = usedCodes(ledger.stock.filter((s) => s.id !== item?.id));
+  const shopCode = codeList.find(isShopCode);
+  function makeShopCode() {
+    const lines = parseCodes(v.codes).map(fixAzertyDigits);
+    const fresh = shopCode || item ? freshShopCode(new Set([...taken, ...lines.map((x) => x.toLowerCase())])) : newShopCode(newId, taken);
+    const at = lines.findIndex(isShopCode);
+    const next = at < 0 ? [...lines, fresh] : lines.map((c, i) => (i === at ? fresh : c));
+    set("codes")(next.join("\n"));
+  }
+  const saveWithNewCode = (print: boolean) => save([...codeList, newShopCode(newId, taken)], print);
 
   return (
     <Modal
@@ -416,6 +447,23 @@ function StockForm({
               📷
             </button>
           </div>
+          <div className="code-tools">
+            <button type="button" className="link-btn" onClick={makeShopCode}>
+              {shopCode ? "🔄 رقم جديد للباركود" : "🏷️ صاوب باركود ديال المحل"}
+            </button>
+            {shopCode && (
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => void downloadBarcodePng(shopCode, { name: v.item.trim() || undefined, price: parseAmount(v.sellPrice) > 0 ? money(parseAmount(v.sellPrice)) : undefined })}
+              >
+                ⬇️ تحميل الباركود (صورة)
+              </button>
+            )}
+          </div>
+          {shopCode && item && shopCodeOfItem(item) && shopCodeOfItem(item) !== shopCode && (
+            <span className="field-hint warn-text">الملصقات القديمة ديال هاد السلعة ما غاديش يبقاو يتسكانا: طبع جداد.</span>
+          )}
         </Field>
         <Field id="st-notes" label="ملاحظات" wide>
           <input id="st-notes" value={v.notes} onChange={(e) => set("notes")(e.target.value)} />
@@ -436,6 +484,37 @@ function StockForm({
           </button>
         )}
       </form>
+      {askBarcode && (
+        <Modal
+          title="🏷️ ما زدتيش باركود"
+          onClose={() => setAskBarcode(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setAskBarcode(false);
+                  save(codeList);
+                }}
+              >
+                لا، بلا باركود
+              </button>
+              <button type="button" className="btn primary" onClick={() => saveWithNewCode(false)}>
+                صاوب باركود
+              </button>
+            </>
+          }
+        >
+          <p className="lead">نصاوبو باركود ديال المحل لـ «{v.item.trim()}»؟</p>
+          <p className="muted small">
+            الرقم غادي يكون <bdi dir="ltr">{newShopCode(newId, taken)}</bdi>. من بعد تقدر تطبع الملصقات ولا تحملو كصورة.
+          </p>
+          <button type="button" className="btn wide" onClick={() => saveWithNewCode(true)}>
+            🖨️ صاوب باركود وطبع الملصقات دابا
+          </button>
+        </Modal>
+      )}
       {addingCategory && (
         <CategoryForm
           data={data}
@@ -448,10 +527,14 @@ function StockForm({
       )}
       {scanning && (
         <BarcodeScanner
+          continuous
           onClose={() => setScanning(false)}
           onResult={(c) => {
+            // The camera stays open: each code goes on its own line (twice = ignored).
+            if (parseCodes(v.codes).some((x) => x.toLowerCase() === c.toLowerCase())) return { ok: false, text: "كاين ديجا فاللائحة" };
+            const other = ledger.stock.find((s) => s.id !== item?.id && productCodes(s).some((x) => x.toLowerCase() === c.toLowerCase()));
             setV((o) => ({ ...o, codes: o.codes.trim() ? `${o.codes.trim()}\n${c}` : c }));
-            setScanning(false);
+            return other ? { ok: false, text: `مستعمل فـ «${other.item}»` } : { ok: true, text: "تزاد" };
           }}
         />
       )}
