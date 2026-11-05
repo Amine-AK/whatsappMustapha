@@ -535,7 +535,9 @@ input[type="date"] { min-height: 44px; }
 
 /* ---------------------------------------------------------------- shop barcode labels */
 
-.label-preview { display: flex; justify-content: center; padding: 12px; border-radius: 10px; background: var(--surface-2); }
+.label-preview { position: relative; display: flex; justify-content: center; padding: 12px; border-radius: 10px; background: var(--surface-2); }
+.preview-tools { position: absolute; inset-inline-start: 8px; top: 8px; display: grid; gap: 6px; }
+.preview-tools .icon-btn { min-height: 36px; min-width: 36px; padding: 0; font-size: 16px; }
 .label-preview .label { box-shadow: 0 2px 10px rgb(0 0 0 / 18%); }
 .label-tools { display: flex; gap: 14px; flex-wrap: wrap; }
 .label-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 40vh; overflow: auto; }
@@ -548,8 +550,6 @@ input[type="date"] { min-height: 44px; }
 .label-count { width: 72px; flex: none; text-align: center; }
 .label-list .icon-btn { flex: none; min-height: 36px; min-width: 36px; padding: 0; font-size: 16px; }
 .code-tools { display: flex; flex-wrap: wrap; gap: 4px 16px; }
-.blank-codes p { margin: 0; }
-.blank-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
 
 /* The sticker itself: black on white, sizes in mm for the printer. */
 .label {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { freshShopCode, isShopCode, newShopCode, shopCodeOf as shopCodeOfItem, usedCodes } from "@/lib/barcode";
+import { freshShopCode, isEan13, isShopCode, newShopCode, shopCodeOf as shopCodeOfItem, usedCodes } from "@/lib/barcode";
 import { downloadBarcodePng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
 import { CONDITIONS, newLedgerId, nowParts, productCodes, type Condition, type StockItem } from "@/lib/ledger";
@@ -363,6 +363,8 @@ function StockForm({
   // The shop barcode in the codes box, if any; «باركود جديد» puts one there (or a new number in its place).
   const taken = usedCodes(ledger.stock.filter((s) => s.id !== item?.id));
   const shopCode = codeList.find(isShopCode);
+  // The barcode to save as an image: the shop's, else a supplier's EAN-13.
+  const imageCode = shopCode ?? codeList.find(isEan13);
   function makeShopCode() {
     const lines = parseCodes(v.codes).map(fixAzertyDigits);
     const fresh = shopCode || item ? freshShopCode(new Set([...taken, ...lines.map((x) => x.toLowerCase())])) : newShopCode(newId, taken);
@@ -451,11 +453,11 @@ function StockForm({
             <button type="button" className="link-btn" onClick={makeShopCode}>
               {shopCode ? "🔄 رقم جديد للباركود" : "🏷️ صاوب باركود ديال المحل"}
             </button>
-            {shopCode && (
+            {imageCode && (
               <button
                 type="button"
                 className="link-btn"
-                onClick={() => void downloadBarcodePng(shopCode, { name: v.item.trim() || undefined, price: parseAmount(v.sellPrice) > 0 ? money(parseAmount(v.sellPrice)) : undefined })}
+                onClick={() => void downloadBarcodePng(imageCode, { name: v.item.trim() || undefined, price: parseAmount(v.sellPrice) > 0 ? money(parseAmount(v.sellPrice)) : undefined })}
               >
                 ⬇️ تحميل الباركود (صورة)
               </button>
