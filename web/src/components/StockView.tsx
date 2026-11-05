@@ -28,7 +28,6 @@ type Sub =
   | { kind: "adjust"; item: StockItem; scanned?: boolean; newCode?: string }
   | { kind: "unknown-code"; code: string }
   | { kind: "delete"; item: StockItem }
-  | { kind: "scan" }
   | { kind: "categories" }
   | { kind: "labels"; item?: StockItem }
   | { kind: "category"; name?: string }
@@ -40,6 +39,8 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const [category, setCategory] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
   const [sub, setSub] = useState<Sub>(null);
+  // The camera stays open behind the windows a scan opens, and reads again when they close.
+  const [scanOpen, setScanOpen] = useState(false);
 
   const viewRef = useRef<HTMLDivElement>(null);
   const fullStock = can(data.me, "stock");
@@ -94,7 +95,7 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         <button type="button" className="btn" onClick={() => setSub({ kind: "categories" })}>
           🗂️ الفئات
         </button>
-        <button type="button" className="btn" onClick={() => setSub({ kind: "scan" })}>
+        <button type="button" className="btn" onClick={() => setScanOpen(true)}>
           📷 سكاني
         </button>
         <button type="button" className="btn" onClick={() => setSub({ kind: "labels" })}>
@@ -202,11 +203,17 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
         />
       )}
       {sub?.kind === "labels" && <LabelPrint data={data} preselect={sub.item} onClose={() => setSub(null)} onToast={onToast} />}
-      {sub?.kind === "scan" && (
+      {scanOpen && (
         <BarcodeScanner
           title="📷 سكاني السلعة"
-          onClose={() => setSub(null)}
-          onResult={scanned}
+          continuous
+          paused={sub !== null}
+          onClose={() => setScanOpen(false)}
+          onResult={(code) => {
+            const found = findByCode(ledger.stock, code);
+            scanned(code);
+            return found ? { ok: true, text: found.item } : { ok: false, text: "كود جديد" };
+          }}
         />
       )}
       {sub?.kind === "categories" && (
@@ -520,10 +527,14 @@ function StockForm({
       )}
       {scanning && (
         <BarcodeScanner
+          continuous
           onClose={() => setScanning(false)}
           onResult={(c) => {
+            // The camera stays open: each code goes on its own line (twice = ignored).
+            if (parseCodes(v.codes).some((x) => x.toLowerCase() === c.toLowerCase())) return { ok: false, text: "كاين ديجا فاللائحة" };
+            const other = ledger.stock.find((s) => s.id !== item?.id && productCodes(s).some((x) => x.toLowerCase() === c.toLowerCase()));
             setV((o) => ({ ...o, codes: o.codes.trim() ? `${o.codes.trim()}\n${c}` : c }));
-            setScanning(false);
+            return other ? { ok: false, text: `مستعمل فـ «${other.item}»` } : { ok: true, text: "تزاد" };
           }}
         />
       )}

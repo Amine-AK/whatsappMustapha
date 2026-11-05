@@ -905,6 +905,12 @@ a.btn { text-decoration: none; }
 }
 .scanner-help { position: absolute; inset-inline: 0; bottom: 10px; text-align: center; color: #fff; font-size: 14px; text-shadow: 0 1px 3px #000; }
 .scanner-type { display: grid; gap: 6px; }
+.scan-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.scan-history li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 14px; background: var(--surface-2); }
+.scan-history li:first-child { font-weight: 600; }
+.scan-history li.ok > span:first-child { color: var(--accent); }
+.scan-history li.bad { background: var(--danger-soft); color: var(--danger); }
+.scan-history .scan-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------------------------------------------------------------- category icons */
 

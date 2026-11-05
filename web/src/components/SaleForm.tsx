@@ -609,10 +609,13 @@ export function SaleForm({
     {scanning && (
       <BarcodeScanner
         title="📷 سكاني السلعة"
+        continuous
         onClose={() => setScanning(false)}
         onResult={(code) => {
-          setScanning(false);
+          // The camera stays open: each code adds its product (again = +1).
+          const found = findByCode(ledger.stock, code);
           scanned(code);
+          return found ? { ok: true, text: `${found.item} · ${money(found.sellPrice)}` } : { ok: false, text: "ما كايناش فالمخزون" };
         }}
       />
     )}
