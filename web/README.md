@@ -336,6 +336,14 @@ different suppliers carries one label with one name and one price.
   a shop barcode replaces it: its old stickers no longer scan, print new ones.
 - The image file is named `<latin part of the name>-<code>.png`
   (`barcode-<code>.png` for an Arabic name: some browsers drop Arabic file names).
+- **Barcodes without a product («🔢 باركودات بلا سلعة», sticker window):**
+  choose how many (e.g. 40), **✨ صاوب** makes that many different numbers,
+  **🔄 أرقام جداد** makes another set whenever you want. **🖨️ طبع** prints them
+  (barcode only, no name or price) or **⬇️ تحميل كصورة** saves them on one PNG.
+  Stick them on the products; later, scanning one in المخزون opens «سلعة جديدة»
+  with that code, as for a new supplier's product. The numbers never match a
+  product's code, and the ones printed or downloaded on this device are
+  remembered so they are not made again.
 
 ### ⚙️ ضبط الطابعة (printer setup)
 

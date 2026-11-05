@@ -548,6 +548,8 @@ input[type="date"] { min-height: 44px; }
 .label-count { width: 72px; flex: none; text-align: center; }
 .label-list .icon-btn { flex: none; min-height: 36px; min-width: 36px; padding: 0; font-size: 16px; }
 .code-tools { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.blank-codes p { margin: 0; }
+.blank-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
 
 /* The sticker itself: black on white, sizes in mm for the printer. */
 .label {
