@@ -151,17 +151,16 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
 
   const setCount = (id: string, n: number) => setCounts((c) => ({ ...c, [id]: Math.max(0, Math.min(500, Math.floor(n) || 0)) }));
 
-  function print() {
-    // Products printed for the first time get their code saved (a move of 0 units that adds the code).
-    const fresh = chosen.filter((s) => codes.get(s.id)?.isNew);
-    for (const s of fresh) {
-      const c = codes.get(s.id)!;
-      // A new number in place of the product's old shop code.
-      if (c.replaces) {
-        const list = withShopCode(productCodes(s), c.code);
-        data.run(`رقم جديد للباركود · ${s.item}`, { type: "stock.update", id: s.id, base: s.updatedAt, patch: { serial: list[0] ?? "", codes: list.slice(1) } });
-        continue;
-      }
+  /** Saves the product's code if it is new here (first time, or «🔄» new number). */
+  function saveCode(s: StockItem) {
+    const c = codes.get(s.id);
+    if (!c?.isNew) return false;
+    // A new number in place of the product's old shop code.
+    if (c.replaces) {
+      const list = withShopCode(productCodes(s), c.code);
+      data.run(`رقم جديد للباركود · ${s.item}`, { type: "stock.update", id: s.id, base: s.updatedAt, patch: { serial: list[0] ?? "", codes: list.slice(1) } });
+    } else {
+      // First time: a move of 0 units that adds the code.
       data.run(`باركود المحل · ${s.item}`, {
         type: "stock.adjust",
         move: {
@@ -172,10 +171,26 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
           reason: "باركود المحل",
           seller: currentSeller(),
           createdAt: new Date().toISOString(),
-          codesIn: [codes.get(s.id)!.code],
+          codesIn: [c.code],
         },
       });
     }
+    return true;
+  }
+
+  /** The product's barcode as a PNG; its code is saved first, so the image matches what scans. */
+  function download(s: StockItem) {
+    const c = codes.get(s.id);
+    if (!c) return;
+    if (saveCode(s)) {
+      setRenumbered(({ [s.id]: _, ...rest }) => rest);
+      onToast(`تسجل الباركود ديال «${s.item}»`);
+    }
+    void downloadBarcodePng(c.code, { name: s.item, price: showPrice ? money(s.sellPrice) : undefined });
+  }
+
+  function print() {
+    const fresh = chosen.filter(saveCode);
     if (fresh.length) onToast(`تسجل الباركود ديال ${fresh.length} سلعة`);
     setRenumbered({});
     // Let React put the labels in the page before the print window opens.
@@ -266,6 +281,17 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
         {(labels[0] || roll) && (
           <div className="label-preview" aria-label="شكل الملصق">
             {placed(labels[0] ?? stock[0] ?? SAMPLE, 0, true)}
+            {/* The product shown: change its barcode, or save it as an image. */}
+            {labels[0] && (
+              <div className="preview-tools">
+                <button type="button" className="btn icon-btn" onClick={() => renumber(labels[0])} title="بدل الباركود" aria-label={`بدل الباركود ديال ${labels[0].item}`}>
+                  🔄
+                </button>
+                <button type="button" className="btn icon-btn" onClick={() => download(labels[0])} title="تحميل الباركود (صورة)" aria-label={`تحميل الباركود ديال ${labels[0].item} كصورة`}>
+                  ⬇️
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -319,7 +345,7 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
                 <button
                   type="button"
                   className="btn ghost icon-btn"
-                  onClick={() => void downloadBarcodePng(c.code, { name: s.item, price: showPrice ? money(s.sellPrice) : undefined })}
+                  onClick={() => download(s)}
                   title="تحميل الباركود (صورة)"
                   aria-label={`تحميل الباركود ديال ${s.item} كصورة`}
                 >

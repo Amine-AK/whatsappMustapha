@@ -330,7 +330,11 @@ different suppliers carries one label with one name and one price.
 - **In the product form**, under the codes: **🏷️ صاوب باركود ديال المحل** puts
   a shop barcode in the codes; once there, **🔄 رقم جديد للباركود** swaps it for
   another random number (as many times as you like, saved with **حفظ**), and
-  **⬇️ تحميل الباركود (صورة)** downloads it as a PNG (name, price, bars and digits).
+  **⬇️ تحميل الباركود (صورة)** downloads it as a PNG (name, price, bars and digits);
+  a product with only a supplier's EAN-13 barcode can be downloaded too.
+- **Next to the sticker preview** (sticker window): **🔄** changes the shown
+  product's barcode to a new number, **⬇️** downloads it as a PNG (the new
+  code is saved first, so the image always scans as the product).
 - **In the sticker window**, each product has **🔄** (new number, saved when
   printing) and **⬇️** (PNG image). A new number on a product that already had
   a shop barcode replaces it: its old stickers no longer scan, print new ones.
