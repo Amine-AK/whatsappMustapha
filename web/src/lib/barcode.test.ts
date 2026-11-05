@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ean13Check, ean13Modules, freshShopCode, freshShopCodes, isEan13, isShopCode, newShopCode, shopCodeOf, withShopCode } from "./barcode";
+import { ean13Check, ean13Modules, freshShopCode, isEan13, isShopCode, newShopCode, shopCodeOf, withShopCode } from "./barcode";
 
 describe("shop barcodes", () => {
   it("computes EAN-13 check digits", () => {
@@ -53,14 +53,5 @@ describe("shop barcodes", () => {
     expect(withShopCode(["SN123", old, "QR9"], fresh)).toEqual(["SN123", fresh, "QR9"]);
     expect(withShopCode(["SN123"], fresh)).toEqual(["SN123", fresh]);
     expect(withShopCode([], fresh)).toEqual([fresh]);
-  });
-
-  it("makes a batch of different shop codes, none already taken", () => {
-    const taken = new Set(freshShopCodes(5, new Set()));
-    const batch = freshShopCodes(40, taken);
-    expect(batch).toHaveLength(40);
-    expect(new Set(batch).size).toBe(40);
-    expect(batch.every(isShopCode)).toBe(true);
-    expect(batch.some((c) => taken.has(c))).toBe(false);
   });
 });

@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ean13Modules, freshShopCode, freshShopCodes, newShopCode, shopCodeOf, usedCodes, withShopCode } from "@/lib/barcode";
-import { downloadBarcodePng, downloadBarcodeSheetPng } from "@/lib/barcode-image";
+import { ean13Modules, freshShopCode, newShopCode, shopCodeOf, usedCodes, withShopCode } from "@/lib/barcode";
+import { downloadBarcodePng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
 import { barcodeFit, contentSize, pageCss, pageGroups, isLandscape, sheetSize, type LabelSetup } from "@/lib/label-layout";
 import { newLedgerId, nowParts, productCodes, type StockItem } from "@/lib/ledger";
@@ -25,29 +25,6 @@ const SIZE_KEY = "label-size";
 const PRICE_KEY = "label-price";
 const MAX_LABELS = 1000;
 const CALIBRATION_COUNT = 5;
-// Codes made without a product («باركودات بلا سلعة»), printed or downloaded on this
-// device: kept so they are never made again before a product gets them.
-const ISSUED_KEY = "blank-codes-issued";
-const MAX_BLANK = 500;
-/** A sticker with a code and no product yet. */
-const BLANK = "BLANK:";
-const blankItem = (code: string) => ({ id: BLANK + code, item: "", sellPrice: 0 }) as StockItem;
-const isBlank = (s: StockItem) => s.id.startsWith(BLANK);
-
-function readIssued(): string[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(ISSUED_KEY) ?? "[]");
-    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-function markIssued(codes: string[]) {
-  try {
-    localStorage.setItem(ISSUED_KEY, JSON.stringify([...new Set([...readIssued(), ...codes])].slice(-5000)));
-  } catch {}
-}
-
 // The sticker printed by the calibration print when no product is chosen.
 const SAMPLE = { id: "TEST", item: "تجربة الطباعة 123", sellPrice: 99.5 } as StockItem;
 
@@ -67,10 +44,6 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   // Calibration print: a few stickers with their edges drawn, nothing saved.
   const [calibrating, setCalibrating] = useState(false);
   const roll = paper === "roll";
-  // «باركودات بلا سلعة»: codes for stickers put on products before they are in the stock.
-  const [blank, setBlank] = useState<string[]>([]);
-  const [blankN, setBlankN] = useState(40);
-  const [printingBlank, setPrintingBlank] = useState(false);
 
   useEffect(() => {
     try {
@@ -120,27 +93,8 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const chosen = stock.filter((s) => (counts[s.id] ?? 0) > 0);
   const total = chosen.reduce((t, s) => t + counts[s.id], 0);
   const labels = chosen.flatMap((s) => Array.from({ length: counts[s.id] }, () => s));
-  const codeOf = (s: StockItem) => (isBlank(s) ? s.id.slice(BLANK.length) : (codes.get(s.id)?.code ?? newShopCode(s.id, new Set())));
-  const printed = calibrating
-    ? Array.from({ length: CALIBRATION_COUNT }, () => labels[0] ?? stock[0] ?? SAMPLE)
-    : printingBlank
-      ? blank.map(blankItem)
-      : labels;
-
-  /** New numbers for the stickers without a product: none used by a product, shown here, or printed before. */
-  function makeBlank() {
-    const taken = usedCodes(stock);
-    for (const c of codes.values()) taken.add(c.code.toLowerCase());
-    for (const c of readIssued()) taken.add(c.toLowerCase());
-    setBlank(freshShopCodes(Math.max(1, Math.min(MAX_BLANK, blankN)), taken));
-  }
-
-  function printBlank() {
-    markIssued(blank);
-    setPrintingBlank(true);
-    window.addEventListener("afterprint", () => setPrintingBlank(false), { once: true });
-    setTimeout(() => window.print(), 50);
-  }
+  const codeOf = (s: StockItem) => codes.get(s.id)?.code ?? newShopCode(s.id, new Set());
+  const printed = calibrating ? Array.from({ length: CALIBRATION_COUNT }, () => labels[0] ?? stock[0] ?? SAMPLE) : labels;
   const groups = roll ? pageGroups(setup, printed.length) : [];
 
   function calibrate() {
@@ -153,10 +107,10 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const placed = (s: StockItem, key: number, frame?: boolean) =>
     roll ? (
       <LabelCell key={key} s={setup} frame={frame}>
-        <RollLabel item={s} code={codeOf(s)} setup={setup} showPrice={showPrice && !isBlank(s)} />
+        <RollLabel item={s} code={codeOf(s)} setup={setup} showPrice={showPrice} />
       </LabelCell>
     ) : (
-      <Label key={key} item={s} code={codeOf(s)} showPrice={showPrice && !isBlank(s)} />
+      <Label key={key} item={s} code={codeOf(s)} showPrice={showPrice} />
     );
 
   // Paysage: the roll layout turned 90° (counter-clockwise) into a landscape page. Each
@@ -328,53 +282,6 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
           />
         )}
 
-        <fieldset className="setup-group blank-codes">
-          <legend>🔢 باركودات بلا سلعة</legend>
-          <p className="muted small">
-            صاوب أرقام جداد، طبعهم ولصقهم على السلع. من بعد سكاني واحد فـ«المخزون» باش تزيد السلعة بهاد الكود (بحال سلعة جديدة من عند المورد).
-          </p>
-          <div className="blank-row">
-            <label htmlFor="blank-n">شحال من باركود</label>
-            <input
-              id="blank-n"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={MAX_BLANK}
-              className="label-count"
-              value={blankN}
-              onChange={(e) => setBlankN(Math.max(1, Math.min(MAX_BLANK, Math.floor(Number(e.target.value)) || 1)))}
-            />
-            <button type="button" className="btn" onClick={makeBlank}>
-              {blank.length ? "🔄 أرقام جداد" : "✨ صاوب"}
-            </button>
-          </div>
-          {blank.length > 0 && (
-            <>
-              <p className="small">
-                {blank.length} رقم: <bdi dir="ltr">{blank.slice(0, 3).join(" · ")}</bdi>
-                {blank.length > 3 ? " …" : ""}
-              </p>
-              <div className="setup-actions">
-                <button type="button" className="btn primary" onClick={printBlank}>
-                  🖨️ طبع {blank.length} ملصق بلا سلعة
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    markIssued(blank);
-                    void downloadBarcodeSheetPng(blank, `barcodes-${blank.length}`);
-                  }}
-                >
-                  ⬇️ تحميل كصورة
-                </button>
-              </div>
-              <span className="field-hint">الملصق فيه غير الباركود (بلا سمية وبلا ثمن). الأرقام اللي طبعتي ولا حملتي ما كيتعاودوش.</span>
-            </>
-          )}
-        </fieldset>
-
         <label className="visually-hidden" htmlFor="label-search">
           قلب على سلعة
         </label>
@@ -453,7 +360,7 @@ function Label({ item, code, showPrice }: { item: StockItem; code: string; showP
   return (
     <div className="label size-a4" dir="rtl" lang="ar">
       <p className="label-shop">{SHOP.name}</p>
-      {item.item && <p className="label-item">{item.item}</p>}
+      <p className="label-item">{item.item}</p>
       {showPrice && <p className="label-price">{money(item.sellPrice)}</p>}
       <Ean13 code={code} />
     </div>
@@ -473,7 +380,7 @@ function RollLabel({ item, code, setup, showPrice }: { item: StockItem; code: st
           {SHOP.name}
         </p>
       )}
-      {setup.showItem && item.item && (
+      {setup.showItem && (
         <p className="label-item" style={{ fontSize: pt(setup.itemSize) }}>
           {item.item}
         </p>

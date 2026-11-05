@@ -79,15 +79,3 @@ export function withShopCode(codes: string[], fresh: string): string[] {
   if (at < 0) return [...codes, fresh];
   return codes.map((c, i) => (i === at ? fresh : c));
 }
-
-/** `n` new shop codes, all different and none in `taken`: stickers printed before any product has them. */
-export function freshShopCodes(n: number, taken: Set<string>, random: () => number = Math.random): string[] {
-  const used = new Set(taken);
-  const out: string[] = [];
-  while (out.length < n) {
-    const code = freshShopCode(used, random);
-    used.add(code.toLowerCase());
-    out.push(code);
-  }
-  return out;
-}

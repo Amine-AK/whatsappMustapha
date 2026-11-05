@@ -66,7 +66,20 @@ export function downloadBarcodePng(code: string, text: BarcodeImageText = {}): P
   const canvas = barcodeCanvas(code, text);
   // Latin letters and digits only: some browsers drop a file name with Arabic letters.
   const safe = (text.name ?? "").replace(/[^A-Za-z0-9 _-]+/g, " ").trim().replace(/\s+/g, "-").slice(0, 40) || "barcode";
-  return saveCanvas(canvas, `${safe}-${code}.png`);
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((blob) => {
+      if (!blob) return reject(new Error("image"));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safe}-${code}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      resolve();
+    }, "image/png"),
+  );
 }
 
 /** Cuts a too long text and ends it with «…». */
@@ -75,38 +88,4 @@ function fit(g: CanvasRenderingContext2D, s: string, max: number): string {
   let out = s;
   while (out.length > 1 && g.measureText(out + "…").width > max) out = out.slice(0, -1);
   return out + "…";
-}
-
-/** Many barcodes (digits under each) on one PNG, 4 per row: for codes made without a product. */
-export function downloadBarcodeSheetPng(codes: string[], fileName = "barcodes"): Promise<void> {
-  const tiles = codes.map((c) => barcodeCanvas(c));
-  const cols = Math.min(4, tiles.length);
-  const tw = tiles[0]?.width ?? 1;
-  const th = tiles[0]?.height ?? 1;
-  const gap = 20;
-  const canvas = document.createElement("canvas");
-  canvas.width = cols * tw + (cols + 1) * gap;
-  canvas.height = Math.ceil(tiles.length / cols) * (th + gap) + gap;
-  const g = canvas.getContext("2d")!;
-  g.fillStyle = "#fff";
-  g.fillRect(0, 0, canvas.width, canvas.height);
-  tiles.forEach((t, i) => g.drawImage(t, gap + (i % cols) * (tw + gap), gap + Math.floor(i / cols) * (th + gap)));
-  return saveCanvas(canvas, `${fileName}.png`);
-}
-
-function saveCanvas(canvas: HTMLCanvasElement, name: string): Promise<void> {
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((blob) => {
-      if (!blob) return reject(new Error("image"));
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      resolve();
-    }, "image/png"),
-  );
 }
