@@ -2,10 +2,10 @@
 
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { freshShopCode, isEan13, isShopCode, newShopCode, shopCodeOf as shopCodeOfItem, usedCodes } from "@/lib/barcode";
-import { downloadBarcodePng } from "@/lib/barcode-image";
+import { downloadStickerPng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
 import { CONDITIONS, newLedgerId, nowParts, productCodes, type Condition, type StockItem } from "@/lib/ledger";
-import { displayDate } from "@/lib/receipt";
+import { displayDate, SHOP } from "@/lib/receipt";
 import { currentSeller, findByCode, normalizeText, parseCodes, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
 import { can, seesCost } from "@/lib/roles";
@@ -13,6 +13,7 @@ import { BarcodeScanner } from "./BarcodeScanner";
 import { CategoryForm } from "./CategoryForm";
 import { CategoryIcon } from "./CategoryIcon";
 import { LabelPrint } from "./LabelPrint";
+import { useLabelSetup } from "./LabelSetup";
 import { EyeButton, shown, useHiddenAmount } from "./HideAmount";
 import { useScannerInput } from "./useScannerInput";
 import { Modal } from "./Modal";
@@ -298,6 +299,8 @@ function StockForm({
   onLabels?: () => void;
 }) {
   const ledger = data.ledger!;
+  // The sticker settings of this device: the downloaded image looks like the printed sticker.
+  const [labelSetup] = useLabelSetup();
   // The new product's id, known before saving so its shop barcode can be made from it.
   const [newId] = useState(() => newLedgerId("I"));
   // A new product saved without any code: ask to make the shop's barcode first.
@@ -457,7 +460,14 @@ function StockForm({
               <button
                 type="button"
                 className="link-btn"
-                onClick={() => void downloadBarcodePng(imageCode, { name: v.item.trim() || undefined, price: parseAmount(v.sellPrice) > 0 ? money(parseAmount(v.sellPrice)) : undefined })}
+                onClick={() => {
+                  let withPrice = true;
+                  try {
+                    withPrice = localStorage.getItem("label-price") !== "no";
+                  } catch {}
+                  const sell = parseAmount(v.sellPrice);
+                  void downloadStickerPng(imageCode, labelSetup, { shop: SHOP.name, name: v.item.trim() || undefined, price: withPrice && sell > 0 ? money(sell) : undefined });
+                }}
               >
                 ⬇️ تحميل الباركود (صورة)
               </button>

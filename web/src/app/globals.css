@@ -535,8 +535,19 @@ input[type="date"] { min-height: 44px; }
 
 /* ---------------------------------------------------------------- shop barcode labels */
 
-.label-preview { position: relative; display: flex; justify-content: center; padding: 12px; border-radius: 10px; background: var(--surface-2); }
-.preview-tools { position: absolute; inset-inline-start: 8px; top: 8px; display: grid; gap: 6px; }
+.label-preview { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; border-radius: 10px; background: var(--surface-2); }
+/* The sticker editor (StickerEditor.tsx): fingers move / resize the lines. */
+.sticker-editor-wrap { display: grid; gap: 6px; width: 100%; justify-items: center; }
+.sticker-editor { width: 100%; display: flex; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.sticker-editor:active { cursor: grabbing; }
+.sticker-zoom { flex: none; overflow: hidden; direction: ltr; } /* zoomed from its top-left corner (the sticker text stays RTL) */
+.sticker-editor [data-part] { cursor: move; }
+.sticker-editor .part-on { outline: 0.25mm dashed var(--accent); outline-offset: 0.3mm; }
+.sticker-editor-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; min-height: 36px; }
+.sticker-editor-size { display: inline-flex; gap: 4px; }
+.sticker-editor-size .icon-btn { min-height: 34px; min-width: 34px; padding: 0; font-size: 18px; }
+/* 🔄 / ⬇️ under the sticker, so they never cover it in the editor. */
+.preview-tools { display: flex; gap: 8px; }
 .preview-tools .icon-btn { min-height: 36px; min-width: 36px; padding: 0; font-size: 16px; }
 .label-preview .label { box-shadow: 0 2px 10px rgb(0 0 0 / 18%); }
 .label-tools { display: flex; gap: 14px; flex-wrap: wrap; }

@@ -330,7 +330,7 @@ different suppliers carries one label with one name and one price.
 - **In the product form**, under the codes: **🏷️ صاوب باركود ديال المحل** puts
   a shop barcode in the codes; once there, **🔄 رقم جديد للباركود** swaps it for
   another random number (as many times as you like, saved with **حفظ**), and
-  **⬇️ تحميل الباركود (صورة)** downloads it as a PNG (name, price, bars and digits);
+  **⬇️ تحميل الباركود (صورة)** downloads it as a PNG (the sticker, see below);
   a product with only a supplier's EAN-13 barcode can be downloaded too.
 - **Next to the sticker preview** (sticker window): **🔄** changes the shown
   product's barcode to a new number, **⬇️** downloads it as a PNG (the new
@@ -338,8 +338,10 @@ different suppliers carries one label with one name and one price.
 - **In the sticker window**, each product has **🔄** (new number, saved when
   printing) and **⬇️** (PNG image). A new number on a product that already had
   a shop barcode replaces it: its old stickers no longer scan, print new ones.
-- The image file is named `<latin part of the name>-<code>.png`
-  (`barcode-<code>.png` for an Arabic name: some browsers drop Arabic file names).
+- **The image is the sticker** as set in **ضبط الطابعة**: its size, margins,
+  rotation, the ticked lines and their sizes, bold price, space between lines,
+  bar height and digits (not the printer shift / gap). Drawn at 16 px per mm.
+  The file is named after the product: `<product name>.png`.
 
 ### ⚙️ ضبط الطابعة (printer setup)
 
@@ -376,6 +378,20 @@ preview draws the sticker's edge (red dashes) and the space inside the margins.
   3. Print window: **Margins: None**, **Scale: 100**, **Headers and footers** off.
   4. Receipt printer driver (*Printing preferences*): turn off the automatic
      cut and the paper feed after printing.
+
+### ✋ Editing the sticker with the fingers (like Canva)
+
+The sticker preview in the sticker window is an editor, zoomed to the screen width:
+
+- **One finger** (or the mouse) on a line (shop name, product name, price,
+  barcode): selects it (dashed frame) and **moves** it anywhere on the sticker.
+- **Two fingers** spread / pinched: the selected line gets **bigger / smaller**
+  (text: its size in pt; barcode: its width and bar height together).
+  On a PC: the **mouse wheel**. The **− / +** buttons do the same.
+- **↺ رجع البلايص** puts every line back in its place.
+- Saved on the device with the other sticker settings; printing and the
+  downloaded image use the same positions and sizes. Nothing shows outside
+  the margins.
 
 ### HPRT N41 (label printer, 203 dpi), once on the PC
 
