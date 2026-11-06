@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isLandscape, barcodeFit, contentBox, contentSize, DEFAULT_SETUP, pageCss, pageGroups, paperWidth, pitch, sanitizeSetup } from "./label-layout";
+import { isLandscape, moveBy, resetMoves, resizeBy, barcodeFit, contentBox, contentSize, DEFAULT_SETUP, pageCss, pageGroups, paperWidth, pitch, sanitizeSetup } from "./label-layout";
 
 describe("sticker layout", () => {
   it("places stickers every h + gap mm", () => {
@@ -69,5 +69,30 @@ describe("sticker layout", () => {
   it("draws barcode bars on whole printer dots", () => {
     expect(barcodeFit(50)).toEqual({ width: 400 / 3, left: 19.17 });
     expect(barcodeFit(30).width).toBe(120);
+  });
+
+  it("moves a line with one finger, in the sticker's own direction", () => {
+    const s = sanitizeSetup({});
+    expect(moveBy(s, "price", 2, -1).moves.price).toEqual({ x: 2, y: -1 });
+    // Content turned 90°: a finger moving right moves the line "up" in the sticker.
+    const turned = moveBy(sanitizeSetup({ rotate: 90 }), "code", 3, 0).moves.code;
+    expect(turned.x).toBeCloseTo(0);
+    expect(turned.y).toBeCloseTo(-3);
+    expect(moveBy(s, "item", 500, 0).moves.item.x).toBe(60);
+  });
+
+  it("resizes a line with two fingers", () => {
+    const s = sanitizeSetup({ priceSize: 14, barH: 12, barW: 80 });
+    expect(resizeBy(s, "price", 1.5).priceSize).toBe(21);
+    const code = resizeBy(s, "code", 1.5);
+    expect([code.barH, code.barW]).toEqual([18, 100]);
+    expect(resizeBy(s, "item", 0.01).itemSize).toBe(4);
+  });
+
+  it("keeps saved moves and repairs broken ones", () => {
+    const s = sanitizeSetup({ moves: { price: { x: 3, y: "bad" }, code: null } });
+    expect(s.moves.price).toEqual({ x: 3, y: 0 });
+    expect(s.moves.code).toEqual({ x: 0, y: 0 });
+    expect(resetMoves(s).moves.price).toEqual({ x: 0, y: 0 });
   });
 });

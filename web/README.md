@@ -379,6 +379,20 @@ preview draws the sticker's edge (red dashes) and the space inside the margins.
   4. Receipt printer driver (*Printing preferences*): turn off the automatic
      cut and the paper feed after printing.
 
+### ✋ Editing the sticker with the fingers (like Canva)
+
+The sticker preview in the sticker window is an editor, zoomed to the screen width:
+
+- **One finger** (or the mouse) on a line (shop name, product name, price,
+  barcode): selects it (dashed frame) and **moves** it anywhere on the sticker.
+- **Two fingers** spread / pinched: the selected line gets **bigger / smaller**
+  (text: its size in pt; barcode: its width and bar height together).
+  On a PC: the **mouse wheel**. The **− / +** buttons do the same.
+- **↺ رجع البلايص** puts every line back in its place.
+- Saved on the device with the other sticker settings; printing and the
+  downloaded image use the same positions and sizes. Nothing shows outside
+  the margins.
+
 ### HPRT N41 (label printer, 203 dpi), once on the PC
 
 1. Install the HPRT driver for the N41 from the HPRT website, and connect it by USB.

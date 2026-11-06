@@ -54,7 +54,17 @@ export interface LabelSetup {
   showDigits: boolean;
   /** Space between two lines (mm). */
   lineGap: number;
+  /** Barcode width, % of the space inside the margins. */
+  barW: number;
+  /** Each line moved by hand from its place in the stack (mm, in the sticker's own direction). */
+  moves: Record<Part, Move>;
 }
+
+/** The lines of a sticker that can be moved and resized with the fingers. */
+export type Part = "shop" | "item" | "price" | "code";
+export const PARTS: Part[] = ["shop", "item", "price", "code"];
+export type Move = { x: number; y: number };
+const NO_MOVES: Record<Part, Move> = { shop: { x: 0, y: 0 }, item: { x: 0, y: 0 }, price: { x: 0, y: 0 }, code: { x: 0, y: 0 } };
 
 /** A normal 80 mm receipt (ticket) printer with a roll of 50 × 40 mm stickers. */
 export const RECEIPT_PRINTER: LabelSetup = {
@@ -81,6 +91,8 @@ export const RECEIPT_PRINTER: LabelSetup = {
   barH: 12,
   showDigits: false,
   lineGap: 1.5,
+  barW: 100,
+  moves: NO_MOVES,
 };
 
 /** A label printer (HPRT N41…) that finds the gaps itself. */
@@ -88,7 +100,7 @@ export const LABEL_PRINTER: LabelSetup = { ...RECEIPT_PRINTER, gap: 0, mode: "pa
 
 export const DEFAULT_SETUP = RECEIPT_PRINTER;
 
-export type NumKey = "w" | "h" | "gap" | "pageW" | "top" | "bottom" | "left" | "right" | "dx" | "dy" | "shopSize" | "itemSize" | "priceSize" | "barH" | "lineGap";
+export type NumKey = "w" | "h" | "gap" | "pageW" | "top" | "bottom" | "left" | "right" | "dx" | "dy" | "shopSize" | "itemSize" | "priceSize" | "barH" | "lineGap" | "barW";
 
 const LIMITS: Record<NumKey, [number, number]> = {
   w: [15, 110],
@@ -106,6 +118,7 @@ const LIMITS: Record<NumKey, [number, number]> = {
   priceSize: [4, 40],
   barH: [4, 60],
   lineGap: [0, 20],
+  barW: [30, 100],
 };
 
 export function clampField(key: keyof typeof LIMITS, v: unknown): number {
@@ -127,11 +140,41 @@ export function sanitizeSetup(raw: unknown): LabelSetup {
   for (const k of ["showShop", "showItem", "priceBold", "showDigits", "landscape", "driverPage"] as const) {
     if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
   }
+  const moves = (r.moves && typeof r.moves === "object" ? r.moves : {}) as Record<string, { x?: unknown; y?: unknown }>;
+  out.moves = Object.fromEntries(PARTS.map((k) => [k, { x: clampMove(moves[k]?.x), y: clampMove(moves[k]?.y) }])) as Record<Part, Move>;
   // The margins must leave some room for the sticker's content.
   if (out.left + out.right > out.w - 10) out.left = out.right = 0;
   if (out.top + out.bottom > out.h - 8) out.top = out.bottom = 0;
   return out;
 }
+
+function clampMove(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(Math.max(-60, Math.min(60, n)) * 10) / 10 : 0;
+}
+
+/**
+ * A finger moved a line by (dx, dy) mm on the screen: the move in the
+ * sticker's own direction (the content may be turned 90°, 180° or 270°).
+ */
+export function moveBy(s: LabelSetup, part: Part, dx: number, dy: number): LabelSetup {
+  const a = (-s.rotate * Math.PI) / 180;
+  const x = dx * Math.cos(a) - dy * Math.sin(a);
+  const y = dx * Math.sin(a) + dy * Math.cos(a);
+  const m = s.moves[part];
+  return { ...s, moves: { ...s.moves, [part]: { x: clampMove(m.x + x), y: clampMove(m.y + y) } } };
+}
+
+/** Two fingers spread `ratio` times since the gesture began on `start`: the line's size follows. */
+export function resizeBy(start: LabelSetup, part: Part, ratio: number): LabelSetup {
+  const k = Math.max(0.2, Math.min(5, ratio));
+  if (part === "code") return { ...start, barH: clampField("barH", start.barH * k), barW: clampField("barW", start.barW * k) };
+  const key = part === "shop" ? "shopSize" : part === "item" ? "itemSize" : "priceSize";
+  return { ...start, [key]: clampField(key, start[key] * k) };
+}
+
+/** Every line back in its place in the stack. */
+export const resetMoves = (s: LabelSetup): LabelSetup => ({ ...s, moves: NO_MOVES });
 
 /** Distance from the top of one sticker to the top of the next (mm). */
 export const pitch = (s: LabelSetup) => round(s.h + s.gap);

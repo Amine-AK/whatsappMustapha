@@ -1,5 +1,5 @@
 import { ean13Modules } from "./barcode";
-import { barcodeFit, contentSize, type LabelSetup } from "./label-layout";
+import { barcodeFit, contentSize, type LabelSetup, type Part } from "./label-layout";
 
 // A product's sticker as a PNG image, to download and use elsewhere (another
 // label program, WhatsApp, a supplier…), drawn with the same settings as the
@@ -38,18 +38,23 @@ export function stickerCanvas(code: string, s: LabelSetup, text: StickerText): H
   const box = { x: px(s.left), y: px(s.top), w: px(s.w - s.left - s.right), h: px(s.h - s.top - s.bottom) };
   const size = contentSize(s);
   const cw = px(size.w);
+  // Like the printed sticker: nothing shows outside the margins.
+  g.beginPath();
+  g.rect(box.x, box.y, box.w, box.h);
+  g.clip();
   g.translate(box.x + box.w / 2, box.y + box.h / 2);
   g.rotate((s.rotate * Math.PI) / 180);
 
   // The lines, top to bottom, as on the sticker (line height 1.1).
-  type Line = { h: number; draw: (top: number) => void };
+  type Line = { part: Part; h: number; draw: (top: number) => void };
   const lines: Line[] = [];
-  const textLine = (str: string, pt: number, weight: number, maxLines: number, padMm = 0) => {
+  const textLine = (part: Part, str: string, pt: number, weight: number, maxLines: number, padMm = 0) => {
     const fpx = px(pt * PT);
     g.font = `${weight} ${fpx}px system-ui, sans-serif`;
     const rows = wrap(g, str, cw - px(padMm) * 2, maxLines);
     const lh = fpx * 1.1;
     lines.push({
+      part,
       h: rows.length * lh,
       draw: (top) => {
         g.font = `${weight} ${fpx}px system-ui, sans-serif`;
@@ -58,21 +63,23 @@ export function stickerCanvas(code: string, s: LabelSetup, text: StickerText): H
       },
     });
   };
-  if (s.showShop && text.shop) textLine(text.shop, s.shopSize, 400, 1);
-  if (s.showItem && text.name) textLine(text.name, s.itemSize, 500, size.h < 32 ? 1 : 2, 2);
-  if (text.price) textLine(text.price, s.priceSize, s.priceBold ? 800 : 400, 1);
+  if (s.showShop && text.shop) textLine("shop", text.shop, s.shopSize, 400, 1);
+  if (s.showItem && text.name) textLine("item", text.name, s.itemSize, 500, size.h < 32 ? 1 : 2, 2);
+  if (text.price) textLine("price", text.price, s.priceSize, s.priceBold ? 800 : 400, 1);
 
-  // The barcode: the whole width, bars on the same grid as the printed one.
-  const fit = barcodeFit(size.w);
-  const mod = cw / fit.width;
+  // The barcode: its width (% of the space inside the margins), bars on the same grid as the printed one.
+  const bw = (cw * s.barW) / 100;
+  const fit = barcodeFit((size.w * s.barW) / 100);
+  const mod = bw / fit.width;
   const barsH = px(s.barH);
   const digitsPx = px(6.5 * PT);
   const codeH = barsH + (s.showDigits ? px(0.3) + digitsPx * 1.1 : 0);
   lines.push({
+    part: "code",
     h: codeH,
     draw: (top) => {
       const m = ean13Modules(code);
-      for (let i = 0; i < m.length; i++) if (m[i] === "1") g.fillRect(-cw / 2 + (fit.left + i) * mod, top, mod + 0.3, barsH);
+      for (let i = 0; i < m.length; i++) if (m[i] === "1") g.fillRect(-bw / 2 + (fit.left + i) * mod, top, mod + 0.3, barsH);
       if (s.showDigits) {
         g.font = `${digitsPx}px ui-monospace, monospace`;
         g.direction = "ltr";
@@ -87,7 +94,12 @@ export function stickerCanvas(code: string, s: LabelSetup, text: StickerText): H
   const total = lines.reduce((t, l) => t + l.h, 0) + gap * (lines.length - 1);
   let y = -total / 2;
   for (const l of lines) {
+    // Where the fingers moved this line.
+    const m = s.moves[l.part];
+    g.save();
+    g.translate(px(m.x), px(m.y));
     l.draw(y);
+    g.restore();
     y += l.h + gap;
   }
   return canvas;

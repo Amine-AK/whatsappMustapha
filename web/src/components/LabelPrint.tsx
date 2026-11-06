@@ -5,12 +5,13 @@ import { createPortal } from "react-dom";
 import { ean13Modules, freshShopCode, newShopCode, shopCodeOf, usedCodes, withShopCode } from "@/lib/barcode";
 import { downloadStickerPng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
-import { barcodeFit, contentSize, pageCss, pageGroups, isLandscape, sheetSize, type LabelSetup } from "@/lib/label-layout";
+import { barcodeFit, contentSize, pageCss, pageGroups, isLandscape, paperWidth, pitch, sheetSize, type LabelSetup, type Part } from "@/lib/label-layout";
 import { newLedgerId, nowParts, productCodes, type StockItem } from "@/lib/ledger";
 import { SHOP } from "@/lib/receipt";
 import { currentSeller, searchStock } from "@/lib/shop";
 import { Modal } from "./Modal";
 import { LabelCell, LabelSetupPanel, useLabelSetup } from "./LabelSetup";
+import { StickerEditor } from "./StickerEditor";
 import type { LedgerState } from "./useLedger";
 
 /** A roll of stickers (any size, set in «ضبط الطابعة») or an A4 sheet. */
@@ -44,6 +45,8 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   // Calibration print: a few stickers with their edges drawn, nothing saved.
   const [calibrating, setCalibrating] = useState(false);
   const roll = paper === "roll";
+  // The line touched in the editor (moved / resized with the fingers).
+  const [selectedPart, setSelectedPart] = useState<Part | null>(null);
 
   useEffect(() => {
     try {
@@ -104,10 +107,10 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   }
 
   /** A sticker in its place on the roll (shifted, inside its margins, turned), or an A4 sticker. */
-  const placed = (s: StockItem, key: number, frame?: boolean) =>
+  const placed = (s: StockItem, key: number, frame?: boolean, selected?: Part | null) =>
     roll ? (
       <LabelCell key={key} s={setup} frame={frame}>
-        <RollLabel item={s} code={codeOf(s)} setup={setup} showPrice={showPrice} />
+        <RollLabel item={s} code={codeOf(s)} setup={setup} showPrice={showPrice} selected={selected} />
       </LabelCell>
     ) : (
       <Label key={key} item={s} code={codeOf(s)} showPrice={showPrice} />
@@ -280,7 +283,13 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
 
         {(labels[0] || roll) && (
           <div className="label-preview" aria-label="شكل الملصق">
-            {placed(labels[0] ?? stock[0] ?? SAMPLE, 0, true)}
+            {roll ? (
+              <StickerEditor setup={setup} onChange={setSetup} selected={selectedPart} onSelect={setSelectedPart} width={paperWidth(setup)} height={pitch(setup)}>
+                {placed(labels[0] ?? stock[0] ?? SAMPLE, 0, true, selectedPart)}
+              </StickerEditor>
+            ) : (
+              placed(labels[0] ?? stock[0] ?? SAMPLE, 0, true)
+            )}
             {/* The product shown: change its barcode, or save it as an image. */}
             {labels[0] && (
               <div className="preview-tools">
@@ -394,34 +403,42 @@ function Label({ item, code, showPrice }: { item: StockItem; code: string; showP
 }
 
 /** A roll sticker: the chosen lines, centred, with the chosen sizes and space between them. */
-function RollLabel({ item, code, setup, showPrice }: { item: StockItem; code: string; setup: LabelSetup; showPrice: boolean }) {
+function RollLabel({ item, code, setup, showPrice, selected }: { item: StockItem; code: string; setup: LabelSetup; showPrice: boolean; selected?: Part | null }) {
   const size = contentSize(setup);
-  // The barcode spans the whole width, each bar a whole number of printer dots.
-  const fit = barcodeFit(size.w);
+  // The barcode spans its width (% of the space inside the margins), each bar a whole number of printer dots.
+  const fit = barcodeFit((size.w * setup.barW) / 100);
   const pt = (n: number) => `${n}pt`;
+  // Each line: where the fingers moved it, and «data-part» so the editor knows what was touched.
+  const part = (p: Part) => ({
+    "data-part": p,
+    className: selected === p ? "part-on" : undefined,
+    style: { transform: `translate(${setup.moves[p].x}mm, ${setup.moves[p].y}mm)` } as CSSProperties,
+  });
   return (
     <div className="label roll" dir="rtl" lang="ar" style={{ gap: `${setup.lineGap}mm` }}>
       {setup.showShop && (
-        <p className="label-shop" style={{ fontSize: pt(setup.shopSize) }}>
+        <p {...part("shop")} className={cx("label-shop", selected === "shop")} style={{ ...part("shop").style, fontSize: pt(setup.shopSize) }}>
           {SHOP.name}
         </p>
       )}
-      {setup.showItem && (
-        <p className="label-item" style={{ fontSize: pt(setup.itemSize) }}>
+      {setup.showItem && item.item && (
+        <p {...part("item")} className={cx("label-item", selected === "item")} style={{ ...part("item").style, fontSize: pt(setup.itemSize) }}>
           {item.item}
         </p>
       )}
       {showPrice && (
-        <p className="label-price" style={{ fontSize: pt(setup.priceSize), fontWeight: setup.priceBold ? 800 : 400 }}>
+        <p {...part("price")} className={cx("label-price", selected === "price")} style={{ ...part("price").style, fontSize: pt(setup.priceSize), fontWeight: setup.priceBold ? 800 : 400 }}>
           {money(item.sellPrice)}
         </p>
       )}
-      <div className="label-code">
+      <div {...part("code")} className={cx("label-code", selected === "code")} style={{ ...part("code").style, width: `${setup.barW}%` }}>
         <Ean13 code={code} width={fit.width} left={fit.left} digits={setup.showDigits} barsMm={setup.barH} />
       </div>
     </div>
   );
 }
+
+const cx = (base: string, on: boolean) => (on ? `${base} part-on` : base);
 
 /**
  * An EAN-13 as SVG bars, with the digits under it. `width` is the whole
