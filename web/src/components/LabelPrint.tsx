@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ean13Modules, freshShopCode, newShopCode, shopCodeOf, usedCodes, withShopCode } from "@/lib/barcode";
-import { downloadBarcodePng } from "@/lib/barcode-image";
+import { downloadStickerPng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
 import { barcodeFit, contentSize, pageCss, pageGroups, isLandscape, sheetSize, type LabelSetup } from "@/lib/label-layout";
 import { newLedgerId, nowParts, productCodes, type StockItem } from "@/lib/ledger";
@@ -186,7 +186,7 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
       setRenumbered(({ [s.id]: _, ...rest }) => rest);
       onToast(`تسجل الباركود ديال «${s.item}»`);
     }
-    void downloadBarcodePng(c.code, { name: s.item, price: showPrice ? money(s.sellPrice) : undefined });
+    void downloadStickerPng(c.code, setup, { shop: SHOP.name, name: s.item, price: showPrice ? money(s.sellPrice) : undefined });
   }
 
   function print() {
