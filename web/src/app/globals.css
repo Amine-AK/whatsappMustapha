@@ -639,6 +639,46 @@ input[type="date"] { min-height: 44px; }
 .card-open:focus-visible { border-radius: 8px; }
 .card-actions.two { grid-template-columns: 1.3fr 1fr; }
 
+/* Customer list on phones: one compact line per customer (ClientRow in Dashboard.tsx). */
+.client-rows {
+  list-style: none; margin: 0; padding: 0; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+}
+.client-row { display: flex; align-items: center; gap: 4px; padding-inline-end: 6px; }
+.client-row + .client-row { border-top: 1px solid var(--line); }
+.client-row-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer;
+}
+.client-row-open:active { background: var(--surface-2); }
+.avatar {
+  flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 18px; background: var(--surface-2); color: var(--muted);
+}
+.status-overdue .avatar { background: var(--danger-soft); color: var(--danger); }
+.status-today .avatar { background: var(--warn-soft); color: var(--warn); }
+.status-tomorrow .avatar { background: var(--info-soft); color: var(--info); }
+.status-paid .avatar { background: var(--accent-soft); color: var(--accent); }
+.row-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.row-name { font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sub { display: flex; align-items: baseline; gap: 4px; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.row-due { flex: none; }
+.row-item { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.row-more { flex: none; }
+.status-overdue .row-due { color: var(--danger); font-weight: 600; }
+.status-today .row-due { color: var(--warn); font-weight: 600; }
+.row-amount { flex: none; display: grid; justify-items: end; gap: 2px; }
+.row-remaining { font-weight: 800; font-size: 16px; white-space: nowrap; }
+.status-overdue .row-remaining { color: var(--danger); }
+.status-today .row-remaining { color: var(--warn); }
+.status-paid .row-remaining { color: var(--accent); font-size: 14px; }
+.row-date { font-size: 12px; color: var(--muted); }
+.row-pay {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--surface); font-size: 18px; cursor: pointer;
+}
+.row-pay:active { background: var(--accent-soft); }
+
 .archive-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 10px 12px; border-radius: 10px; background: var(--info-soft); color: var(--info); font-size: 14px;
