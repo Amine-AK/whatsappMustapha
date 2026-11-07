@@ -67,7 +67,7 @@ UI calls data.run(label, ...ops)  →  op queued, applied locally (optimistic), 
 
 | Task / feature | File(s) |
 |---|---|
-| App shell, main tabs (الكريدي / البيع / المخزون / الصندوق / التقارير), customer list, search | `components/Dashboard.tsx` (`VIEWS`) |
+| App shell, main tabs (الكريدي / البيع / المخزون / الصندوق / التقارير), customer list (phone: `ClientRow` lines, PC: `ClientCard` cards, switch `useIsPhone` < 640 px), search | `components/Dashboard.tsx` (`VIEWS`) |
 | Customer page (purchases, payments, delete) | `components/ClientDetail.tsx` |
 | Add / edit customer, instalment (الطريطة) | `components/ClientForms.tsx` |
 | Add purchase, record / edit payment (split hint, next due date) | `components/MoneyForms.tsx` |
@@ -150,6 +150,11 @@ can render a component with fake data:
    with ffmpeg; all PNGs must be the same mode, e.g. RGB 640×480).
 3. **Delete the test page, `.next/` and `web/AGENTS.md`** (created by next dev)
    before committing.
+
+To test `<Dashboard />` itself, render it on such a page and answer the app's
+calls in Playwright: `ctx.route('**/api/**', …)` returning `{ ledger, today, me }`
+for `/api/data`; set `localStorage['backup-last'] = Date.now()` first, or the daily
+backup window covers the screen.
 
 Notes: launch Chromium with `LANG=C.UTF-8` or Arabic download file names come
 out as "download". Two-finger touch can't be sent through CDP; dispatch

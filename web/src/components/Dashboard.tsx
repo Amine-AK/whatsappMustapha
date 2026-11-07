@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { apiFetch } from "@/lib/client";
 import { idbClearLedger } from "@/lib/idb";
 import { can, ROLE_LABEL, type Me } from "@/lib/roles";
@@ -106,6 +106,7 @@ export function Dashboard() {
   const [showFilters, setShowFilters] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [view, setViewState] = useState<View>("credit");
+  const phone = useIsPhone();
   const [hideDebt, toggleDebt] = useHiddenAmount("credit-total");
 
   useEffect(() => {
@@ -458,16 +459,19 @@ export function Dashboard() {
                 {visible.length === 0 ? (
                   <p className="empty">{query ? "ما لقينا حتى زبون بهاد البحث هنا. جرب «الكل» ولا «الأرشيف»." : "ما كاين حتى زبون هنا."}</p>
                 ) : (
-                  <ul className="cards">
-                    {visible.slice(0, MAX_CARDS).map((s) => (
-                      <ClientCard
-                        key={s.client.id}
-                        s={s}
-                        today={today}
-                        onOpen={() => setDialog({ kind: "client", id: s.client.id })}
-                        onPay={allow("payment") ? () => setDialog({ kind: "pay", id: s.client.id }) : undefined}
-                      />
-                    ))}
+                  <ul className={phone ? "client-rows" : "cards"}>
+                    {visible.slice(0, MAX_CARDS).map((s) => {
+                      const Item = phone ? ClientRow : ClientCard;
+                      return (
+                        <Item
+                          key={s.client.id}
+                          s={s}
+                          today={today}
+                          onOpen={() => setDialog({ kind: "client", id: s.client.id })}
+                          onPay={allow("payment") ? () => setDialog({ kind: "pay", id: s.client.id }) : undefined}
+                        />
+                      );
+                    })}
                   </ul>
                 )}
                 {visible.length > MAX_CARDS && <p className="muted center small">كيبانو غير {MAX_CARDS} الأولين. قلب بالاسم باش تلقا الباقي.</p>}
@@ -533,6 +537,72 @@ export function Dashboard() {
       )}
     </div>
   );
+}
+
+/** Phone width: the customer list is compact lines instead of cards. */
+const PHONE_QUERY = "(max-width: 639px)";
+function subscribePhone(cb: () => void) {
+  const mq = window.matchMedia(PHONE_QUERY);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+function useIsPhone(): boolean {
+  return useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false);
+}
+
+/**
+ * One customer as a line (phones): initial coloured by status, name, when the
+ * next payment is due and what is still being paid, the amount owed, and a
+ * quick «payment» button. Tap the line for the account.
+ */
+function ClientRow({ s, today, onOpen, onPay }: { s: ClientSummary; today: string; onOpen: () => void; onPay?: () => void }) {
+  const c = s.client;
+  const owes = s.remaining > 0;
+  const unpaid = unpaidItems(s);
+  const due = owes ? (c.nextDueDate ? dueText(c.nextDueDate, s.status, today) : STATUS_LABEL.nodate) : STATUS_LABEL.paid;
+  return (
+    <li className={`client-row status-${s.status}`}>
+      <button type="button" className="client-row-open" onClick={onOpen} aria-label={`حساب ${c.name}`}>
+        <span className="avatar" aria-hidden="true">
+          {initial(c.name)}
+        </span>
+        <span className="row-main">
+          <span className="row-name">{c.name}</span>
+          <span className="row-sub">
+            <span className="row-due">{due}</span>
+            {unpaid.length > 0 && (
+              <>
+                <span aria-hidden="true">·</span>
+                {/* Its own direction, so a long Latin name is cut at its end. */}
+                <span className="row-item" dir="auto">
+                  {unpaid[0]}
+                </span>
+                {unpaid.length > 1 && (
+                  <bdi dir="ltr" className="row-more">
+                    +{unpaid.length - 1}
+                  </bdi>
+                )}
+              </>
+            )}
+          </span>
+        </span>
+        <span className="row-amount">
+          <span className="row-remaining">{owes ? money(s.remaining) : "✓ خالص"}</span>
+          {owes && c.nextDueDate && <bdi dir="ltr" className="row-date">{displayDate(c.nextDueDate)}</bdi>}
+        </span>
+      </button>
+      {onPay && owes && (
+        <button type="button" className="row-pay" onClick={onPay} aria-label={`دفعة ديال ${c.name}`} title="دفعة">
+          💰
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** The first letter of a name, for the round avatar. */
+function initial(name: string): string {
+  return Array.from(name.trim())[0]?.toUpperCase() ?? "؟";
 }
 
 function ClientCard({ s, today, onOpen, onPay }: { s: ClientSummary; today: string; onOpen: () => void; onPay?: () => void }) {
