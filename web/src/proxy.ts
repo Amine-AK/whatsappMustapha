@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
-// Everything except the login page and the PWA files needs a session.
+// Everything except the login page and the PWA files (incl. the barcode reader's .wasm in /scanner/) needs a session.
 export function proxy(request: NextRequest) {
   if (verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
   if (request.nextUrl.pathname.startsWith("/api/")) {
@@ -12,6 +12,6 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!login|api/login|_next/static|_next/image|sw\\.js|offline\\.html|manifest\\.webmanifest|favicon\\.ico|icons/).*)",
+    "/((?!login|api/login|_next/static|_next/image|sw\\.js|offline\\.html|manifest\\.webmanifest|favicon\\.ico|icons/|scanner/).*)",
   ],
 };

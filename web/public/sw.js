@@ -2,7 +2,7 @@
 // It keeps the app itself (page, scripts, styles, fonts, icons) on the device.
 // Customer data is not handled here: the page keeps it in IndexedDB and syncs
 // it through /api, which is never cached.
-const VERSION = "v2";
+const VERSION = "v3";
 const STATIC_CACHE = `static-${VERSION}`;
 const PAGES_CACHE = `pages-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
@@ -12,7 +12,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(STATIC_CACHE)
-      .then((cache) => cache.addAll([OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png", "/manifest.webmanifest"]))
+      .then((cache) => cache.addAll([OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png", "/manifest.webmanifest", "/scanner/zxing_reader.wasm"]))
       .then(() => self.skipWaiting()),
   );
 });
@@ -27,7 +27,7 @@ self.addEventListener("activate", (event) => {
 });
 
 function isStatic(url) {
-  return url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/") || url.pathname === "/manifest.webmanifest";
+  return url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/") || url.pathname.startsWith("/scanner/") || url.pathname === "/manifest.webmanifest";
 }
 
 async function put(cacheName, request, response) {
