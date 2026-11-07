@@ -922,6 +922,11 @@ a.btn { text-decoration: none; }
   border: 0; background: rgb(0 0 0 / 45%); font-size: 20px; cursor: pointer;
 }
 .scanner-torch.on { background: #ffd54a; }
+.scanner-notice {
+  position: absolute; top: 62px; inset-inline: 12px; margin: 0; padding: 8px 12px; border-radius: 10px;
+  background: #fff3cd; color: #6b4e00; font-weight: 700; font-size: 15px; text-align: center; box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+}
+.scan-kind { flex: none; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); }
 .scanner-help { position: absolute; inset-inline: 0; bottom: 10px; text-align: center; color: #fff; font-size: 14px; text-shadow: 0 1px 3px #000; }
 .scanner-type { display: grid; gap: 6px; }
 .scan-history { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }

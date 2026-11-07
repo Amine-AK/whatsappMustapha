@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createConfirmer } from "./confirm";
-import { isValidRead, upcEToUpcA } from "./formats";
+import { codeKind, isValidRead, upcEToUpcA } from "./formats";
 import { roiInVideo } from "./roi";
 
 describe("scanner: check digits", () => {
@@ -15,10 +15,21 @@ describe("scanner: check digits", () => {
     expect(isValidRead("upc_e", "04252614")).toBe(true);
     expect(isValidRead("upc_e", "04252615")).toBe(false);
   });
-  it("keeps Code 128 as read, drops other formats and wrong lengths", () => {
+  it("keeps QR / S/N codes as read, drops unknown formats, wrong lengths and too short reads", () => {
     expect(isValidRead("code_128", "SN-AB12")).toBe(true);
-    expect(isValidRead("qr_code", "hello")).toBe(false);
+    expect(isValidRead("qr_code", "https://example.com/p/1")).toBe(true);
+    expect(isValidRead("code_39", "AB1")).toBe(false);
+    expect(isValidRead("code_39", "AB12")).toBe(true);
+    expect(isValidRead("aztec", "x")).toBe(false);
     expect(isValidRead("ean_13", "123")).toBe(false);
+  });
+  it("tells product barcodes from QR codes and serial numbers", () => {
+    expect(codeKind("ean_13")).toBe("barcode");
+    expect(codeKind("upc_e")).toBe("barcode");
+    expect(codeKind("qr_code")).toBe("qr");
+    expect(codeKind("data_matrix")).toBe("qr");
+    expect(codeKind("code_128")).toBe("sn");
+    expect(codeKind("itf")).toBe("sn");
   });
 });
 

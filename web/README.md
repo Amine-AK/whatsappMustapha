@@ -136,11 +136,14 @@ was set up before them):
   code already in stock asks how many arrived (+1); a new code opens «سلعة
   جديدة» with it filled in. 📷 in the البيع search bar puts the scanned product
   in the sale. The codes are kept in the «الكود» / «أكواد أخرى» columns. The
-  camera reads **EAN-13, EAN-8, UPC-A, UPC-E and Code 128** (not QR codes: type
-  them or use a USB scanner). The code can also be typed.
+  camera reads product barcodes (**EAN-13, EAN-8, UPC-A, UPC-E**), and also
+  **QR codes** (QR, Data Matrix) and **serial numbers** (Code 128, Code 39,
+  Code 93, ITF, Codabar). For a QR or S/N it says «⚠️ هادا ماشي باركود (QR / S/N)»
+  over the camera and tags it «ماشي باركود» in the list; the code is still used.
+  The code can also be typed. A QR code must fit inside the guide rectangle.
 - **Scanner engine (`src/scanner/`):**
-  - Reader: the browser's own `BarcodeDetector` when it reads all these formats
-    (Chrome on Android), else the `barcode-detector` ponyfill (ZXing-C++ in
+  - Reader: the browser's own `BarcodeDetector` when it reads all product
+    barcode formats (Chrome on Android), else the `barcode-detector` ponyfill (ZXing-C++ in
     WebAssembly: iPhone, PCs). The `.wasm` (~0.9 MB) is served by the app from
     `/scanner/zxing_reader.wasm` (copied from `node_modules` by
     `scripts/copy-zxing-wasm.mjs` on install / dev / build, not committed), kept
