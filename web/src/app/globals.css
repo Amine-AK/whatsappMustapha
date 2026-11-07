@@ -941,6 +941,19 @@ a.btn { text-decoration: none; }
 .cat-img { display: block; object-fit: cover; border-radius: 10px; }
 .cat-img.cat-icon { width: 40px; height: 40px; }
 .chip-icon { display: inline-flex; align-items: center; gap: 6px; }
+/* Category chips (المخزون): wrap on wide screens; on phones one row to swipe, faded where more chips are hidden. */
+.cat-chips { --fade-l: 0px; --fade-r: 0px; scroll-snap-type: x proximity; }
+.cat-chips .chip { scroll-snap-align: start; flex: none; }
+.cat-chips.more-end { --fade-l: 48px; }
+.cat-chips.more-start { --fade-r: 48px; }
+.cat-chips.more-start, .cat-chips.more-end {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+}
+@media (min-width: 640px) {
+  .cat-chips { flex-wrap: wrap; overflow-x: visible; }
+  .cat-chips.more-start, .cat-chips.more-end { -webkit-mask-image: none; mask-image: none; }
+}
 .chip-emoji { font-size: 15px; line-height: 1; }
 .cat-img.chip-emoji { width: 20px; height: 20px; border-radius: 5px; }
 .pr-head-icon { display: inline-block; vertical-align: middle; }
