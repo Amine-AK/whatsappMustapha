@@ -3,7 +3,7 @@
 
 import { money } from "./format";
 import { formatMoroccoPhone, installmentLine, isValidPhone } from "./sheet-logic";
-import { itemStatuses, sortPayments, type ClientSummary, type Payment } from "./ledger";
+import { itemStatuses, paymentSplit, sortPayments, type ClientSummary, type Payment } from "./ledger";
 
 export const SHOP = {
   name: "ELECTRO-LMESTOUR",
@@ -48,6 +48,16 @@ export interface PaymentReceipt {
   unpaid: { date: string; item: string; price: number; remaining: number }[];
 }
 
+/**
+ * What the payment paid: its product, or each product it went to when it was
+ * more than what was left on it («عسل: 50 درهم · ثلاجة: 450 درهم»).
+ */
+function paidItems(s: ClientSummary, before: Payment[], payment: Payment): string {
+  const split = paymentSplit(s.purchases.filter((p) => p.date <= payment.date), before, payment);
+  if (split.length > 1) return split.map((x) => `${x.purchase.item}: ${money(x.amount)}`).join(" · ");
+  return split[0]?.purchase.item ?? s.purchases.find((p) => p.id === payment.purchaseId)?.item ?? "";
+}
+
 /** Receipt for one payment, with the account as it was right after it. */
 export function paymentReceipt(s: ClientSummary, payment: Payment): PaymentReceipt {
   const ordered = sortPayments(s.payments);
@@ -65,7 +75,7 @@ export function paymentReceipt(s: ClientSummary, payment: Payment): PaymentRecei
     clientId: s.client.id,
     customer: s.client.name,
     phone: s.client.phone,
-    item: s.purchases.find((p) => p.id === payment.purchaseId)?.item ?? "",
+    item: paidItems(s, index === -1 ? ordered : ordered.slice(0, index), payment),
     amount: payment.amount,
     total,
     paidToDate,

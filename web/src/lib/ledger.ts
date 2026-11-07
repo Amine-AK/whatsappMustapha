@@ -698,6 +698,13 @@ export function itemStatuses(purchases: Purchase[], payments: Payment[]): ItemSt
     remaining: 0,
   }));
   let pool = payments.filter((x) => !x.purchaseId || !purchases.some((p) => p.id === x.purchaseId)).reduce((s, x) => s + x.amount, 0);
+  // Paid more than a product's price (e.g. 500 on 50 left): the rest goes to the oldest products still unpaid.
+  for (const it of items) {
+    if (it.paid > it.purchase.price) {
+      pool += it.paid - it.purchase.price;
+      it.paid = it.purchase.price;
+    }
+  }
   for (const it of items) {
     const room = Math.max(0, it.purchase.price - it.paid);
     const take = Math.min(room, pool);
@@ -709,6 +716,18 @@ export function itemStatuses(purchases: Purchase[], payments: Payment[]): ItemSt
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * How a payment is spread over the products: first what is left on its own
+ * product, the rest on the oldest products still unpaid. `before` are the
+ * customer's earlier payments.
+ */
+export function paymentSplit(purchases: Purchase[], before: Payment[], payment: Payment): { purchase: Purchase; amount: number }[] {
+  const pre = itemStatuses(purchases, before);
+  return itemStatuses(purchases, [...before, payment])
+    .map((it, i) => ({ purchase: it.purchase, amount: round(it.paid - pre[i].paid) }))
+    .filter((x) => x.amount > 0);
+}
 
 export function summarizeClient(ledger: Ledger, clientOrId: Client, today: string): ClientSummary {
   // Always the latest version of the customer in this ledger.
