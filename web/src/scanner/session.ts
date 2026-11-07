@@ -5,7 +5,7 @@
 import { closeCamera, openCamera, setTorch } from "./camera";
 import { createConfirmer } from "./confirm";
 import { createFrameDecoder, type FrameDecoder } from "./decoder";
-import { isValidRead } from "./formats";
+import { codeKind, isValidRead, type CodeKind } from "./formats";
 import { roiInVideo } from "./roi";
 
 /** No code read for this long: show the hint. */
@@ -23,8 +23,8 @@ export interface ScanSession {
 
 export interface SessionOptions {
   video: HTMLVideoElement;
-  /** A confirmed code (raw value). */
-  onCode: (code: string) => void;
+  /** A confirmed code (raw value), and whether it is a product barcode, a QR code or a serial number. */
+  onCode: (code: string, kind: CodeKind) => void;
   onHint: (show: boolean) => void;
   /** Aborted when the scanner closes: everything opened so far is closed. */
   signal: AbortSignal;
@@ -85,7 +85,7 @@ export async function startScanSession({ video, onCode, onHint, signal, paused =
     if (good && confirmer.read(good.rawValue.trim(), now)) {
       lastReadAt = now;
       setHint(false);
-      onCode(good.rawValue.trim());
+      onCode(good.rawValue.trim(), codeKind(good.format));
     }
   }
 

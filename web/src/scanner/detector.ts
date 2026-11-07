@@ -1,8 +1,8 @@
-// The barcode reader: the browser's own BarcodeDetector when it reads all our
-// formats (Chrome on Android), else the `barcode-detector` ponyfill (ZXing-C++
+// The barcode reader: the browser's own BarcodeDetector when it reads all
+// product barcode formats (Chrome on Android), else the `barcode-detector` ponyfill (ZXing-C++
 // in WebAssembly: iPhone, PCs). Works in a page and in a Web Worker.
 
-import { SCAN_FORMATS } from "./formats";
+import { PRODUCT_FORMATS, SCAN_FORMATS } from "./formats";
 
 /** Our copy of the reader's .wasm (copied from node_modules by scripts/copy-zxing-wasm.mjs): works offline, no CDN. */
 export const WASM_PATH = "/scanner/zxing_reader.wasm";
@@ -34,8 +34,9 @@ export async function createDetector(): Promise<Detector> {
   if (Native) {
     try {
       const supported = (await Native.getSupportedFormats?.()) ?? [];
-      if (formats.every((f) => supported.includes(f))) {
-        const d = new Native({ formats });
+      // Native when it reads all product barcodes; it then reads whichever of the others it can.
+      if (PRODUCT_FORMATS.every((f) => supported.includes(f))) {
+        const d = new Native({ formats: formats.filter((f) => supported.includes(f)) });
         return { kind: "native", detect: (src) => d.detect(src) };
       }
     } catch {

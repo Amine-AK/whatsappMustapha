@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { beep, primeBeep } from "@/lib/beep";
 import { fixAzertyDigits } from "@/lib/scanner-input";
+import type { CodeKind } from "@/scanner/formats";
 import type { ScanSession } from "@/scanner/session";
 import { Modal } from "./Modal";
 
@@ -14,6 +15,12 @@ import { Modal } from "./Modal";
  * English: "Move the phone back a little / tilt the product to avoid reflections".
  */
 export const SCAN_HINT = "بعد التيليفون شوية · ميل السلعة باش تهرب من الضو اللي كيلمع";
+
+/** Read a QR code or a serial number (S/N) instead of a product barcode: said to the user, the code is still used. */
+export const NOT_BARCODE: Record<Exclude<CodeKind, "barcode">, string> = {
+  qr: "⚠️ هادا ماشي باركود (QR)",
+  sn: "⚠️ هادا ماشي باركود (S/N)",
+};
 
 type Status = "starting" | "scanning" | "insecure" | "unsupported" | "denied" | "nocamera" | "busy" | "error";
 
@@ -38,8 +45,8 @@ export interface ScanFeedback {
 }
 
 /**
- * Scan a barcode (EAN-13, EAN-8, UPC-A, UPC-E, Code 128) with the phone camera
- * or the PC webcam. The code can also be typed, or entered with a USB /
+ * Scan a barcode (EAN-13, EAN-8, UPC-A, UPC-E), a QR code or a serial number
+ * (Code 128, Code 39…; told «ماشي باركود») with the phone camera or the PC webcam. The code can also be typed, or entered with a USB /
  * Bluetooth barcode scanner (it types like a keyboard). Beeps on every read.
  *
  * `continuous`: the camera stays open and reads codes one after the other
@@ -67,7 +74,11 @@ export function BarcodeScanner({
   const [aspect, setAspect] = useState<number | null>(null);
   const [torch, setTorch] = useState<{ has: boolean; on: boolean }>({ has: false, on: false });
   // Codes read so far (continuous), newest first.
-  const [history, setHistory] = useState<(ScanFeedback & { code: string; n: number })[]>([]);
+  const [history, setHistory] = useState<(ScanFeedback & { code: string; n: number; kind?: CodeKind })[]>([]);
+  // «Not a barcode» line over the camera for a moment after a QR / S/N read.
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef(0);
+  useEffect(() => () => clearTimeout(noticeTimer.current), []);
   const done = useRef(false);
   const session = useRef<ScanSession | null>(null);
   // The latest callback / pause, without restarting the camera when the screen updates.
@@ -80,8 +91,8 @@ export function BarcodeScanner({
   useEffect(() => primeBeep(), []);
 
   // One code read (camera or typed): beep, report, and stop unless continuous.
-  const handle = useRef((code: string) => {});
-  handle.current = (code: string) => {
+  const handle = useRef((code: string, kind?: CodeKind) => {});
+  handle.current = (code: string, kind?: CodeKind) => {
     if (done.current) return;
     if (!continuous) {
       done.current = true;
@@ -90,7 +101,12 @@ export function BarcodeScanner({
     const fb = report.current(code) ?? { ok: true, text: "" };
     beep(fb.ok);
     navigator.vibrate?.(fb.ok ? 50 : [60, 60, 60]);
-    if (continuous) setHistory((h) => [{ ...fb, code, n: (h[0]?.n ?? 0) + 1 }, ...h].slice(0, 6));
+    if (continuous) setHistory((h) => [{ ...fb, code, n: (h[0]?.n ?? 0) + 1, kind }, ...h].slice(0, 6));
+    if (kind && kind !== "barcode") {
+      setNotice(NOT_BARCODE[kind]);
+      clearTimeout(noticeTimer.current);
+      noticeTimer.current = window.setTimeout(() => setNotice(null), 2500);
+    }
   };
 
   // Camera + reader: opened once, closed (tracks, worker, frame callbacks) when the scanner closes.
@@ -104,9 +120,9 @@ export function BarcodeScanner({
           video: video.current,
           signal: abort.signal,
           paused: pausedRef.current,
-          onCode: (raw) => {
+          onCode: (raw, kind) => {
             const code = cleanCode(raw);
-            if (code) handle.current(code);
+            if (code) handle.current(code, kind);
           },
           onHint: setHint,
         });
@@ -181,6 +197,11 @@ export function BarcodeScanner({
               🔦
             </button>
           )}
+          {notice && (
+            <p className="scanner-notice" role="status">
+              {notice}
+            </p>
+          )}
           <p className="scanner-help" aria-live="polite">
             {status === "starting" ? "كنحلو الكاميرا…" : hint ? SCAN_HINT : continuous ? "سكاني الأكواد وحدة من مور وحدة" : "دخل الباركود فالمربع"}
           </p>
@@ -193,6 +214,7 @@ export function BarcodeScanner({
             <li key={h.n} className={h.ok ? "ok" : "bad"}>
               <span aria-hidden="true">{h.ok ? "✓" : "✗"}</span>
               <span className="scan-text">{h.text || <bdi dir="ltr">{h.code}</bdi>}</span>
+              {h.kind && h.kind !== "barcode" && <span className="scan-kind">{h.kind === "qr" ? "QR" : "S/N"} · ماشي باركود</span>}
               {h.text && (
                 <bdi dir="ltr" className="small muted">
                   {h.code}

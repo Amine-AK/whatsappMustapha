@@ -1,8 +1,22 @@
 // The barcode formats the camera reads, and their check-digit validation:
 // a misread EAN / UPC almost always fails its check digit, so it is dropped.
 
-export const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] as const;
+/** Product barcodes (the codes on the packaging). */
+export const PRODUCT_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e"] as const;
+/** 2D codes: QR and Data Matrix. */
+export const QR_FORMATS = ["qr_code", "data_matrix"] as const;
+/** Serial numbers / IMEI stickers and other 1D codes. */
+export const SN_FORMATS = ["code_128", "code_39", "code_93", "itf", "codabar"] as const;
+export const SCAN_FORMATS = [...PRODUCT_FORMATS, ...QR_FORMATS, ...SN_FORMATS] as const;
 export type ScanFormat = (typeof SCAN_FORMATS)[number];
+
+/** What a read is: a product barcode, a QR code, or a serial number (S/N). */
+export type CodeKind = "barcode" | "qr" | "sn";
+export function codeKind(format: string): CodeKind {
+  if ((QR_FORMATS as readonly string[]).includes(format)) return "qr";
+  if ((SN_FORMATS as readonly string[]).includes(format)) return "sn";
+  return "barcode";
+}
 
 /** Check digit of `body` (all digits but the last), EAN / UPC rule: weights 3,1,3… from the right. */
 function checkDigit(body: string): number {
@@ -48,8 +62,16 @@ export function isValidRead(format: string, value: string): boolean {
       return a !== null && hasValidCheckDigit(a);
     }
     case "code_128":
-      // Code 128 has its own checksum, verified by the decoder.
+    case "code_93":
+    case "qr_code":
+    case "data_matrix":
+      // These have their own checksum / error correction, verified by the decoder.
       return value.trim().length > 0;
+    case "code_39":
+    case "itf":
+    case "codabar":
+      // No required checksum: very short reads are usually a misread.
+      return value.trim().length >= 4;
     default:
       return false;
   }
