@@ -110,12 +110,13 @@ export interface Statement {
       item: string;
       price: number;
       notes: string;
-      /** Paid on it in all, including its share of the general payments. */
+      /** Paid on it in all. */
       paid: number;
       remaining: number;
+      /** What each payment actually paid on it (a payment can be split over several items). */
       payments: StatementPayment[];
     }[];
-    /** Payments not made for one item: they pay the oldest items first. */
+    /** What payments paid beyond the whole account (nothing left to pay it on). */
     general: StatementPayment[];
     paymentsCount: number;
   };
@@ -124,7 +125,12 @@ export interface Statement {
 export interface StatementPayment {
   /** "dd/mm/yyyy - HH:mm" */
   when: string;
+  /** The part of the payment counted here. */
   amount: number;
+  /** The whole payment, when only part of it is counted here. */
+  of?: number;
+  /** Made for another item (its name) or for no item ("general"): this is what it had left over. */
+  from?: string;
   kind: string;
   notes: string;
 }
@@ -132,6 +138,15 @@ export interface StatementPayment {
 /** The whole account. `lastPayments` limits how many payments are listed (0 = all). */
 export function statement(s: ClientSummary, printedAt: string, lastPayments = 0): Statement {
   const ordered = sortPayments(s.payments);
+  // Payment by payment, in order: how much went to each item (the same rule as the account totals).
+  const split = new Map(ordered.map((p, n) => [p.id, paymentSplit(s.purchases, ordered.slice(0, n), p)]));
+  const nameOf = (id: string) => s.purchases.find((x) => x.id === id)?.item ?? "";
+  const part = (p: Payment, amount: number, purchaseId: string): StatementPayment => ({
+    ...statementPayment(p),
+    amount,
+    of: amount < p.amount ? p.amount : undefined,
+    from: p.purchaseId === purchaseId ? undefined : p.purchaseId && nameOf(p.purchaseId) ? nameOf(p.purchaseId) : "general",
+  });
   const shown = lastPayments > 0 ? ordered.slice(-lastPayments) : ordered;
   const hidden = ordered.slice(0, ordered.length - shown.length);
   return {
@@ -156,9 +171,15 @@ export function statement(s: ClientSummary, printedAt: string, lastPayments = 0)
         notes: i.purchase.notes.trim(),
         paid: i.paid,
         remaining: i.remaining,
-        payments: ordered.filter((p) => p.purchaseId === i.purchase.id).map(statementPayment),
+        payments: ordered.flatMap((p) => {
+          const share = split.get(p.id)!.find((x) => x.purchase.id === i.purchase.id);
+          return share ? [part(p, share.amount, i.purchase.id)] : [];
+        }),
       })),
-      general: ordered.filter((p) => !p.purchaseId || !s.items.some((i) => i.purchase.id === p.purchaseId)).map(statementPayment),
+      general: ordered.flatMap((p) => {
+        const left = Math.round((p.amount - split.get(p.id)!.reduce((t, x) => t + x.amount, 0)) * 100) / 100;
+        return left > 0 ? [part(p, left, "")] : [];
+      }),
       paymentsCount: ordered.length,
     },
   };
@@ -201,8 +222,14 @@ export function paymentMessage(r: PaymentReceipt): string {
 export function statementMessage(st: Statement): string {
   const d = st.detail;
   const line = "━━━━━━━━━━━━";
-  const pay = (p: StatementPayment) =>
-    `   ▪️ ${p.when} · ${p.kind}: *${money(p.amount)}*${p.notes ? ` (${p.notes})` : ""}`;
+  const pay = (p: StatementPayment) => {
+    const notes = [
+      p.of ? `من ${money(p.of)}` : "",
+      p.from === "general" ? "دفعة عامة" : p.from ? `الباقي من دفعة «${p.from}»` : "",
+      p.notes,
+    ].filter(Boolean);
+    return `   ▪️ ${p.when} · ${p.kind}: *${money(p.amount)}*${notes.length ? ` (${notes.join(" · ")})` : ""}`;
+  };
   const lines = [`السلام عليكم ${st.customer} 👋`, `📋 الحساب الكامل ديالكم عند ${SHOP.name}`, `🕒 ${st.printedAt}`];
 
   d.items.forEach((i, n) => {
@@ -212,14 +239,11 @@ export function statementMessage(st: Statement): string {
       lines.push("💵 الدفعات ديالها:");
       for (const p of i.payments) lines.push(pay(p));
     }
-    const own = i.payments.reduce((t, p) => t + p.amount, 0);
-    const fromGeneral = Math.round((i.paid - own) * 100) / 100;
-    if (fromGeneral > 0) lines.push(`   ▪️ من الدفعات العامة: ${money(fromGeneral)}`);
     lines.push(i.remaining > 0 ? `✔️ تخلص منها: ${money(i.paid)} · ⏳ باقي: *${money(i.remaining)}*` : `✅ خالصة (${money(i.paid)})`);
   });
 
   if (d.general.length) {
-    lines.push(line, "💵 *دفعات عامة* (كتنقص من السلع القدام الأولين):");
+    lines.push(line, "💵 *زيادة على الحساب* (خلصتو كثر من المجموع):");
     for (const p of d.general) lines.push(pay(p));
   }
 

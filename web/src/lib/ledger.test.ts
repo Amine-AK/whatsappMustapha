@@ -212,9 +212,11 @@ describe("receipts", () => {
     if (process.env.SHOW_MESSAGE) console.log(msg);
     expect(msg).toContain("🛒 *1. ثلاجة*\n📅 تاريخ الشرا: 10/01/2026\n💰 الثمن: 6.000 درهم");
     expect(msg).toContain("💵 الدفعات ديالها:\n   ▪️ 10/01/2026 - 10:00 · تسبيق: *2.000 درهم*");
-    expect(msg).toContain("   ▪️ من الدفعات العامة: 3.000 درهم\n✔️ تخلص منها: 5.000 درهم · ⏳ باقي: *1.000 درهم*");
+    // General payments are listed under the item they paid.
+    expect(msg).toContain("   ▪️ 10/04/2026 - 10:00 · دفعة: *1.000 درهم* (دفعة عامة)\n✔️ تخلص منها: 5.000 درهم · ⏳ باقي: *1.000 درهم*");
     expect(msg).toContain("🛒 *2. ماشينة الصابون*");
-    expect(msg).toContain("💵 *دفعات عامة* (كتنقص من السلع القدام الأولين):\n   ▪️ 10/02/2026 - 10:00 · دفعة: *1.000 درهم*");
+    expect(msg).not.toContain("من الدفعات العامة");
+    expect(msg).not.toContain("زيادة على الحساب");
     expect(msg).toContain("💵 المدفوع: 6.500 درهم (5 دفعات)");
     expect(msg).toContain("⏳ المتبقي: *2.000 درهم*");
   });
@@ -375,6 +377,33 @@ describe("the WhatsApp message after a payment bigger than its product", () => {
     expect(msg).toContain("(عسل حر أعشاب 500g: 50 درهم · ثلاجة: 450 درهم)");
     expect(msg).toContain("▪️ ثلاجة: باقي 4.050 درهم");
     expect(msg).not.toContain("عسل حر أعشاب 500g: باقي");
+  });
+});
+
+describe("the whole-account message when a payment paid more than its product", () => {
+  // The shop's case: vivo y19 1480 (500 + 500 + 200, then 500 on 07/11), cable 40, redmi 1590 bought 07/11.
+  it("lists under each product only what the payment paid on it", () => {
+    const P = (id: string, date: string, item: string, price: number): Purchase => ({ id, clientId: client.id, date, item, price, notes: "", createdAt: T0, updatedAt: T0 });
+    const vivo = P("S-VIVO0001", "2026-11-03", "vivo y19", 1480);
+    const cable = P("S-CABLE001", "2026-11-03", "cable t-c", 40);
+    const redmi = P("S-REDMI001", "2026-11-07", "redmi 15C", 1590);
+    const at = (id: string, date: string, time: string, amount: number, purchaseId: string, kind: Payment["kind"] = "دفعة") => ({ ...pay(id, date, amount, purchaseId, kind), time });
+    const l = applyOps(EMPTY_LEDGER, [
+      op({ type: "client.add", client }),
+      op({ type: "purchase.add", purchase: vivo }),
+      op({ type: "purchase.add", purchase: cable }),
+      op({ type: "payment.add", payment: at("P-VIVO0001", "2026-11-03", "11:13", 500, vivo.id, "تسبيق") }),
+      op({ type: "payment.add", payment: at("P-VIVO0002", "2026-11-03", "11:13", 500, vivo.id) }),
+      op({ type: "payment.add", payment: at("P-CABL0001", "2026-11-03", "11:14", 40, cable.id) }),
+      op({ type: "payment.add", payment: at("P-VIVO0003", "2026-11-03", "11:14", 200, vivo.id) }),
+      op({ type: "purchase.add", purchase: redmi }),
+      op({ type: "payment.add", payment: at("P-VIVO0004", "2026-11-07", "09:33", 500, vivo.id) }),
+    ]);
+    const msg = statementMessage(statement(summarizeClient(l, client, "2026-11-08"), "08/11/2026 - 10:00"));
+    if (process.env.SHOW_MESSAGE) console.log(msg);
+    expect(msg).toContain("   ▪️ 07/11/2026 - 09:33 · دفعة: *280 درهم* (من 500 درهم)\n✅ خالصة (1.480 درهم)");
+    expect(msg).toContain("💵 الدفعات ديالها:\n   ▪️ 07/11/2026 - 09:33 · دفعة: *220 درهم* (من 500 درهم · الباقي من دفعة «vivo y19»)\n✔️ تخلص منها: 220 درهم · ⏳ باقي: *1.370 درهم*");
+    expect(msg).not.toContain("من الدفعات العامة");
   });
 });
 });
