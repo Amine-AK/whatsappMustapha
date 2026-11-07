@@ -3,14 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/copy-zxing-wasm.mjs",
+    "predev": "node scripts/copy-zxing-wasm.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-zxing-wasm.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@zxing/library": "0.23.0",
+    "barcode-detector": "3.2.3",
     "google-auth-library": "10.9.1",
     "next": "16.4.3",
     "react": "19.3.1",

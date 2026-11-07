@@ -7,3 +7,6 @@ next-env.d.ts
 .env.local
 .env.*.local
 !.env.example
+
+# The barcode reader's .wasm, copied from node_modules by scripts/copy-zxing-wasm.mjs
+public/scanner/

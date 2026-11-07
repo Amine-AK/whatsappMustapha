@@ -3,39 +3,28 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { beep, primeBeep } from "@/lib/beep";
 import { fixAzertyDigits } from "@/lib/scanner-input";
+import type { ScanSession } from "@/scanner/session";
 import { Modal } from "./Modal";
 
-// The browser's own barcode reader (Chrome on Android, Samsung Internet, Edge…).
-interface DetectedCode {
-  rawValue: string;
-}
-interface Detector {
-  detect(source: HTMLVideoElement): Promise<DetectedCode[]>;
-}
-interface DetectorClass {
-  new (options?: { formats: string[] }): Detector;
-  getSupportedFormats?: () => Promise<string[]>;
-}
+// The decoding engine lives in src/scanner/ (camera, Web Worker, check digits,
+// confirmation). It is loaded only when the scanner opens, never on the server.
 
-const WANTED = ["qr_code", "ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "code_93", "itf", "codabar", "data_matrix"];
+/**
+ * Shown after a few seconds without a read. Kept as a constant to translate.
+ * English: "Move the phone back a little / tilt the product to avoid reflections".
+ */
+export const SCAN_HINT = "بعد التيليفون شوية · ميل السلعة باش تهرب من الضو اللي كيلمع";
 
-function detectorClass(): DetectorClass | null {
-  return typeof window !== "undefined" && "BarcodeDetector" in window ? (window as unknown as { BarcodeDetector: DetectorClass }).BarcodeDetector : null;
-}
+type Status = "starting" | "scanning" | "insecure" | "unsupported" | "denied" | "nocamera" | "busy" | "error";
 
-/** The browser's reader when there is one (phones), else the bundled one (PCs, iPhone). */
-async function makeDetector(): Promise<Detector> {
-  const Klass = detectorClass();
-  if (Klass) {
-    const supported = (await Klass.getSupportedFormats?.()) ?? WANTED;
-    const formats = WANTED.filter((f) => supported.includes(f));
-    if (formats.length) return new Klass({ formats });
-  }
-  const { createZxingDetector } = await import("@/lib/zxing-detector");
-  return createZxingDetector();
-}
-
-const hasCamera = () => typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+const PROBLEMS: Partial<Record<Status, { level: "info" | "warn"; text: string }>> = {
+  insecure: { level: "warn", text: "الكاميرا كتخدم غير فـ https (العنوان كيبدا بـ https://). كتب الكود ولا استعمل سكانير USB." },
+  unsupported: { level: "info", text: "ما لقيناش كاميرا فهاد الجهاز. كتب الكود ولا استعمل سكانير USB." },
+  denied: { level: "warn", text: "ما عطيتيش الإذن للكاميرا. سمح بيها من إعدادات المتصفح، ولا كتب الكود هنا." },
+  nocamera: { level: "info", text: "ما لقيناش كاميرا فهاد الجهاز. كتب الكود ولا استعمل سكانير USB." },
+  busy: { level: "warn", text: "ما قدرناش نحلو الكاميرا (يمكن مستعملة فشي برنامج آخر). سد البرامج الأخرى ولا كتب الكود هنا." },
+  error: { level: "warn", text: "ما قدرناش نوجدو قارئ الباركود. عاود حل الصفحة ولا كتب الكود هنا." },
+};
 
 /** Codes are kept short and on one line (they go in the barcode / IMEI column). */
 export function cleanCode(raw: string): string {
@@ -48,13 +37,10 @@ export interface ScanFeedback {
   text: string;
 }
 
-/** The same code is read again only after it left the camera for this long (ms). */
-const SAME_CODE_GAP = 1500;
-
 /**
- * Scan a QR code or a barcode with the phone camera or the PC webcam. The code
- * can also be typed, or entered with a USB / Bluetooth barcode scanner (it
- * types like a keyboard). Beeps on every read.
+ * Scan a barcode (EAN-13, EAN-8, UPC-A, UPC-E, Code 128) with the phone camera
+ * or the PC webcam. The code can also be typed, or entered with a USB /
+ * Bluetooth barcode scanner (it types like a keyboard). Beeps on every read.
  *
  * `continuous`: the camera stays open and reads codes one after the other
  * (closed with «✓ ساليت»); `onResult` may return what to show for each one.
@@ -74,11 +60,16 @@ export function BarcodeScanner({
   paused?: boolean;
 }) {
   const video = useRef<HTMLVideoElement>(null);
-  const [status, setStatus] = useState<"starting" | "scanning" | "unsupported" | "denied" | "error">(() => (hasCamera() ? "starting" : "unsupported"));
+  const [status, setStatus] = useState<Status>("starting");
   const [typed, setTyped] = useState("");
+  const [hint, setHint] = useState(false);
+  // The camera box takes the camera's shape (portrait phone, landscape webcam), so the guide covers the real image.
+  const [aspect, setAspect] = useState<number | null>(null);
+  const [torch, setTorch] = useState<{ has: boolean; on: boolean }>({ has: false, on: false });
   // Codes read so far (continuous), newest first.
   const [history, setHistory] = useState<(ScanFeedback & { code: string; n: number })[]>([]);
   const done = useRef(false);
+  const session = useRef<ScanSession | null>(null);
   // The latest callback / pause, without restarting the camera when the screen updates.
   const report = useRef(onResult);
   const pausedRef = useRef(paused);
@@ -92,63 +83,60 @@ export function BarcodeScanner({
   const handle = useRef((code: string) => {});
   handle.current = (code: string) => {
     if (done.current) return;
-    if (!continuous) done.current = true;
+    if (!continuous) {
+      done.current = true;
+      session.current?.setPaused(true);
+    }
     const fb = report.current(code) ?? { ok: true, text: "" };
     beep(fb.ok);
-    navigator.vibrate?.(fb.ok ? 80 : [60, 60, 60]);
+    navigator.vibrate?.(fb.ok ? 50 : [60, 60, 60]);
     if (continuous) setHistory((h) => [{ ...fb, code, n: (h[0]?.n ?? 0) + 1 }, ...h].slice(0, 6));
   };
 
+  // Camera + reader: opened once, closed (tracks, worker, frame callbacks) when the scanner closes.
   useEffect(() => {
-    if (!hasCamera()) return;
-    let stream: MediaStream | null = null;
-    let timer = 0;
-    let stopped = false;
-    // The code in front of the camera, and when it was last seen there.
-    let last = "";
-    let lastSeen = 0;
-
+    const abort = new AbortController();
     (async () => {
       try {
-        const detector = await makeDetector();
-        // TEST: ask for Full HD (the browser gives the closest the camera has), for small / dense barcodes.
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
-        if (stopped) return;
-        const v = video.current!;
-        v.srcObject = stream;
-        await v.play();
+        const { startScanSession } = await import("@/scanner/session");
+        if (abort.signal.aborted || !video.current) return;
+        const s = await startScanSession({
+          video: video.current,
+          signal: abort.signal,
+          paused: pausedRef.current,
+          onCode: (raw) => {
+            const code = cleanCode(raw);
+            if (code) handle.current(code);
+          },
+          onHint: setHint,
+        });
+        if (abort.signal.aborted) return s.stop();
+        session.current = s;
+        setTorch({ has: s.hasTorch, on: false });
         setStatus("scanning");
-        const tick = async () => {
-          if (stopped || done.current) return;
-          try {
-            if (v.readyState >= 2) {
-              const found = (await detector.detect(v)).map((c) => cleanCode(c.rawValue)).find(Boolean);
-              const now = Date.now();
-              if (found) {
-                const again = found === last && now - lastSeen < SAME_CODE_GAP;
-                last = found;
-                lastSeen = now;
-                // Paused: still watching, so a code left in front of the camera isn't read again on resume.
-                if (!again && !pausedRef.current) handle.current(found);
-              }
-            }
-          } catch {
-            // A frame that can't be read: try the next one.
-          }
-          timer = window.setTimeout(tick, 150);
-        };
-        void tick();
-      } catch (e) {
-        if (!stopped) setStatus(e instanceof DOMException && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "denied" : "error");
+      } catch (err) {
+        if (abort.signal.aborted) return;
+        const problem = (err as { problem?: Status }).problem;
+        setStatus(problem && problem in PROBLEMS ? problem : "error");
       }
     })();
-
     return () => {
-      stopped = true;
-      clearTimeout(timer);
-      stream?.getTracks().forEach((t) => t.stop());
+      abort.abort();
+      session.current = null;
     };
   }, []);
+
+  // Paused by the parent (a window on top): decoding stops, the camera stays on.
+  useEffect(() => {
+    session.current?.setPaused(paused || done.current);
+  }, [paused, status]);
+
+  async function toggleTorch() {
+    const s = session.current;
+    if (!s) return;
+    const on = !torch.on;
+    if (await s.setTorch(on)) setTorch({ has: true, on });
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -173,17 +161,32 @@ export function BarcodeScanner({
       }
     >
       {camera && (
-        <div className="scanner">
-          <video ref={video} className="scanner-video" muted playsInline autoPlay aria-label="الكاميرا" />
+        <div className="scanner" style={aspect ? { aspectRatio: String(aspect) } : undefined}>
+          <video
+            ref={video}
+            className="scanner-video"
+            muted
+            playsInline
+            autoPlay
+            aria-label="الكاميرا"
+            onLoadedMetadata={(e) => {
+              const v = e.currentTarget;
+              if (v.videoWidth && v.videoHeight) setAspect(Math.max(3 / 4, Math.min(16 / 9, v.videoWidth / v.videoHeight)));
+            }}
+          />
+          {/* The guide rectangle: exactly the part of the image that is decoded (src/scanner/roi.ts). */}
           <div className="scanner-frame" aria-hidden="true" />
-          <p className="scanner-help">
-            {status === "starting" ? "كنحلو الكاميرا…" : continuous ? "سكاني الأكواد وحدة من مور وحدة" : "قرب الكود للكاميرا (QR ولا باركود)"}
+          {torch.has && (
+            <button type="button" className={`scanner-torch${torch.on ? " on" : ""}`} onClick={() => void toggleTorch()} aria-pressed={torch.on} aria-label="الضو ديال الكاميرا">
+              🔦
+            </button>
+          )}
+          <p className="scanner-help" aria-live="polite">
+            {status === "starting" ? "كنحلو الكاميرا…" : hint ? SCAN_HINT : continuous ? "سكاني الأكواد وحدة من مور وحدة" : "دخل الباركود فالمربع"}
           </p>
         </div>
       )}
-      {status === "unsupported" && <p className="alert info">ما لقيناش كاميرا فهاد الجهاز. كتب الكود ولا استعمل سكانير USB.</p>}
-      {status === "denied" && <p className="alert warn">ما عطيتيش الإذن للكاميرا. سمح بيها من إعدادات المتصفح، ولا كتب الكود هنا.</p>}
-      {status === "error" && <p className="alert warn">ما قدرناش نحلو الكاميرا (يمكن ما كايناش ولا مستعملة فشي برنامج آخر). كتب الكود هنا ولا استعمل سكانير USB.</p>}
+      {PROBLEMS[status] && <p className={`alert ${PROBLEMS[status]!.level}`}>{PROBLEMS[status]!.text}</p>}
       {continuous && history.length > 0 && (
         <ol className="scan-history" aria-live="polite">
           {history.map((h) => (
