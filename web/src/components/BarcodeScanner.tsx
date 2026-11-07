@@ -111,7 +111,8 @@ export function BarcodeScanner({
     (async () => {
       try {
         const detector = await makeDetector();
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        // TEST: ask for Full HD (the browser gives the closest the camera has), for small / dense barcodes.
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
         if (stopped) return;
         const v = video.current!;
         v.srcObject = stream;
