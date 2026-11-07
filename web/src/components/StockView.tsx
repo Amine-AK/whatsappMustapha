@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { freshShopCode, isEan13, isShopCode, newShopCode, shopCodeOf as shopCodeOfItem, usedCodes } from "@/lib/barcode";
 import { downloadStickerPng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
@@ -40,6 +40,26 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
   const [category, setCategory] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
   const [sub, setSub] = useState<Sub>(null);
+  // Category chips on a phone: one row to swipe, faded on the side where more chips are hidden.
+  const chipsRef = useRef<HTMLDivElement>(null);
+  const [chipsMore, setChipsMore] = useState({ start: false, end: false });
+  function measureChips() {
+    const el = chipsRef.current;
+    if (!el) return;
+    // RTL: scrollLeft is 0 at the start (right) and negative towards the end (left).
+    const done = Math.abs(el.scrollLeft);
+    const left = el.scrollWidth - el.clientWidth - done;
+    const next = { start: done > 2, end: left > 2 };
+    setChipsMore((o) => (o.start === next.start && o.end === next.end ? o : next));
+  }
+  useEffect(() => {
+    measureChips();
+    const el = chipsRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(measureChips);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ledger.categories.length]);
   // The camera stays open behind the windows a scan opens, and reads again when they close.
   const [scanOpen, setScanOpen] = useState(false);
 
@@ -132,12 +152,21 @@ export function StockView({ data, onToast }: { data: LedgerState; onToast: (msg:
           ⚠️ قليلة
         </button>
       </div>
-      <div className="chips" role="group" aria-label="الفئة">
+      <div className={`chips cat-chips${chipsMore.start ? " more-start" : ""}${chipsMore.end ? " more-end" : ""}`} ref={chipsRef} onScroll={measureChips} role="group" aria-label="الفئة">
         <button type="button" className={`chip ${category === "" ? "on" : ""}`} aria-pressed={category === ""} onClick={() => setCategory("")}>
           الكل
         </button>
         {ledger.categories.map((c) => (
-          <button key={c.name} type="button" className={`chip chip-icon ${category === c.name ? "on" : ""}`} aria-pressed={category === c.name} onClick={() => setCategory(c.name)}>
+          <button
+            key={c.name}
+            type="button"
+            className={`chip chip-icon ${category === c.name ? "on" : ""}`}
+            aria-pressed={category === c.name}
+            onClick={(e) => {
+              setCategory(c.name);
+              e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+            }}
+          >
             <CategoryIcon category={c} className="chip-emoji" />
             {c.name}
           </button>
