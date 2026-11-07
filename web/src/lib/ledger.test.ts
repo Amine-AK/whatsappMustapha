@@ -8,6 +8,8 @@ import {
   monthsToFinish,
   newLedgerId,
   summarizeClient,
+  itemStatuses,
+  paymentSplit,
   type Client,
   type Ledger,
   type LedgerOp,
@@ -327,4 +329,52 @@ describe("migration from Feuille 1", () => {
     expect(l.purchases).toHaveLength(1);
     expect(l.purchases[0]).toMatchObject({ item: "Machine + Four", price: 6000 });
   });
+
+describe("a payment bigger than what is left on its product", () => {
+  // The case from the shop: honey 150 (100 already paid), fridge 6000 (1500 paid), then 500 on the honey.
+  const P = (id: string, date: string, item: string, price: number) => ({ id, clientId: "C-1", date, item, price, notes: "", createdAt: "", updatedAt: "" });
+  const Pay = (id: string, purchaseId: string, date: string, amount: number) => ({ id, clientId: "C-1", purchaseId, date, time: "10:00", amount, kind: "دفعة" as const, notes: "", createdAt: "", updatedAt: "" });
+  const honey = P("S-HONEY1", "2026-09-01", "عسل حر أعشاب 500g", 150);
+  const fridge = P("S-FRIDGE1", "2026-09-05", "Frigerateur Candy", 6000);
+  const before = [Pay("P-AAAA1", "S-HONEY1", "2026-10-01", 100), Pay("P-BBBB1", "S-FRIDGE1", "2026-10-01", 1500)];
+  const now = Pay("P-CCCC1", "S-HONEY1", "2026-11-06", 500);
+
+  it("pays the product off and puts the rest on the next unpaid product", () => {
+    const items = itemStatuses([honey, fridge], [...before, now]);
+    expect(items.map((i) => [i.purchase.item, i.paid, i.remaining])).toEqual([
+      ["عسل حر أعشاب 500g", 150, 0],
+      ["Frigerateur Candy", 1950, 4050],
+    ]);
+  });
+
+  it("tells how the payment was split", () => {
+    expect(paymentSplit([honey, fridge], before, now).map((x) => [x.purchase.item, x.amount])).toEqual([
+      ["عسل حر أعشاب 500g", 50],
+      ["Frigerateur Candy", 450],
+    ]);
+  });
+
+  it("a payment that fits its product stays on it", () => {
+    expect(paymentSplit([honey, fridge], before, Pay("P-DDDD1", "S-HONEY1", "2026-11-06", 50)).map((x) => [x.purchase.item, x.amount])).toEqual([["عسل حر أعشاب 500g", 50]]);
+  });
+});
+
+describe("the WhatsApp message after a payment bigger than its product", () => {
+  it("says how it was split and what is left on each product", () => {
+    const honey: Purchase = { id: "S-HONEY001", clientId: client.id, date: "2026-01-05", item: "عسل حر أعشاب 500g", price: 150, notes: "", createdAt: T0, updatedAt: T0 };
+    const l = applyOps(EMPTY_LEDGER, [
+      op({ type: "client.add", client }),
+      op({ type: "purchase.add", purchase: honey }),
+      op({ type: "purchase.add", purchase: fridge }),
+      op({ type: "payment.add", payment: pay("P-PAYHON01", "2026-01-20", 100, honey.id) }),
+      op({ type: "payment.add", payment: pay("P-PAYFRI01", "2026-02-10", 1500, fridge.id) }),
+      op({ type: "payment.add", payment: pay("P-PAYHON02", "2026-03-10", 500, honey.id) }),
+    ]);
+    const s = summarizeClient(l, client, "2026-03-10");
+    const msg = paymentMessage(paymentReceipt(s, s.payments.find((p) => p.id === "P-PAYHON02")!));
+    expect(msg).toContain("(عسل حر أعشاب 500g: 50 درهم · ثلاجة: 450 درهم)");
+    expect(msg).toContain("▪️ ثلاجة: باقي 4.050 درهم");
+    expect(msg).not.toContain("عسل حر أعشاب 500g: باقي");
+  });
+});
 });

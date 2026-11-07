@@ -8,6 +8,7 @@ import {
   newLedgerId,
   nowParts,
   PAYMENT_KINDS,
+  paymentSplit,
   latestNextDue,
   suggestNextDue,
   summarizeClient,
@@ -283,6 +284,15 @@ export function PaymentForm({
   const [nextTouched, setNextTouched] = useState(false);
   const latestNext = latestNextDue(target.client, isISODate(v.date) ? v.date : today);
   const amount = parseAmount(v.amount || "");
+  // More than what is left on the chosen product: the rest goes to the oldest unpaid products.
+  const split =
+    amount > 0
+      ? paymentSplit(
+          target.purchases,
+          target.payments.filter((p) => p.id !== payment?.id),
+          { id: "P-DRAFT000", clientId, purchaseId: v.purchaseId, date: isISODate(v.date) ? v.date : today, time: v.time, amount, kind: v.kind, notes: "", createdAt: "", updatedAt: "" },
+        )
+      : [];
   const after = target.remaining + (payment && clientId === payment.clientId ? payment.amount : 0) - (amount > 0 ? amount : 0);
   // A date typed by hand can break the rules: allowed, with a big warning.
   const nextWarning =
@@ -424,7 +434,11 @@ export function PaymentForm({
         <Field id="pa-amount" label="المبلغ (درهم)" error={errors.amount} hint={after < 0 ? "⚠️ المبلغ كبر من المتبقي" : undefined}>
           <input id="pa-amount" inputMode="decimal" dir="ltr" value={v.amount} onChange={(e) => set("amount")(e.target.value)} autoFocus={!editing} />
         </Field>
-        <Field id="pa-purchaseId" label="السلعة" hint="الأقدم لي باقي ما تخلصاتش، تقدر تبدلها">
+        <Field
+          id="pa-purchaseId"
+          label="السلعة"
+          hint={split.length > 1 ? `كتقسم: ${split.map((x) => `${x.purchase.item}: ${money(x.amount)}`).join(" · ")}` : "الأقدم لي باقي ما تخلصاتش، تقدر تبدلها"}
+        >
           <select id="pa-purchaseId" value={v.purchaseId} onChange={(e) => set("purchaseId")(e.target.value)}>
             {items.map((i) => (
               <option key={i.purchase.id} value={i.purchase.id}>
