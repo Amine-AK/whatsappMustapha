@@ -58,6 +58,8 @@ export interface LabelSetup {
   barW: number;
   /** Each line moved by hand from its place in the stack (mm, in the sticker's own direction). */
   moves: Record<Part, Move>;
+  /** When the shop's default look this device follows was saved ("" = none yet). */
+  lookBase: string;
 }
 
 /** The lines of a sticker that can be moved and resized with the fingers. */
@@ -93,6 +95,7 @@ export const RECEIPT_PRINTER: LabelSetup = {
   lineGap: 1.5,
   barW: 100,
   moves: NO_MOVES,
+  lookBase: "",
 };
 
 /** A label printer (HPRT N41…) that finds the gaps itself. */
@@ -137,6 +140,7 @@ export function sanitizeSetup(raw: unknown): LabelSetup {
   }
   if ([0, 90, 180, 270].includes(r.rotate as number)) out.rotate = r.rotate as Rotation;
   if (r.mode === "strip" || r.mode === "pages") out.mode = r.mode;
+  if (typeof r.lookBase === "string") out.lookBase = r.lookBase.slice(0, 40);
   for (const k of ["showShop", "showItem", "priceBold", "showDigits", "landscape", "driverPage"] as const) {
     if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
   }
@@ -175,6 +179,31 @@ export function resizeBy(start: LabelSetup, part: Part, ratio: number): LabelSet
 
 /** Every line back in its place in the stack. */
 export const resetMoves = (s: LabelSetup): LabelSetup => ({ ...s, moves: NO_MOVES });
+
+/**
+ * Settings of the printer on this device (its gap, paper, shift…): never
+ * shared. Everything else is the sticker's look, shared as the shop default.
+ */
+export const PRINTER_FIELDS = ["gap", "pageW", "dx", "dy", "mode", "landscape", "driverPage"] as const;
+type PrinterField = (typeof PRINTER_FIELDS)[number];
+export type StickerLook = Omit<LabelSetup, PrinterField | "lookBase">;
+
+/** The look part of a setup (what «حفظ كإعداد عادي» shares). */
+export function lookOf(s: LabelSetup): StickerLook {
+  const out: Record<string, unknown> = { ...s };
+  for (const k of [...PRINTER_FIELDS, "lookBase"]) delete out[k];
+  return out as StickerLook;
+}
+
+/** This device's setup with a shared look (e.g. read from the sheet, maybe broken): printer settings kept. */
+export function withLook(s: LabelSetup, look: unknown): LabelSetup {
+  const l = (look && typeof look === "object" ? look : {}) as Record<string, unknown>;
+  const mine = Object.fromEntries([...PRINTER_FIELDS, "lookBase"].map((k) => [k, s[k as keyof LabelSetup]]));
+  return sanitizeSetup({ ...DEFAULT_SETUP, ...l, ...mine });
+}
+
+/** Same look (printer settings ignored). */
+export const sameLook = (a: LabelSetup, b: LabelSetup) => JSON.stringify(lookOf(a)) === JSON.stringify(lookOf(b));
 
 /** Distance from the top of one sticker to the top of the next (mm). */
 export const pitch = (s: LabelSetup) => round(s.h + s.gap);

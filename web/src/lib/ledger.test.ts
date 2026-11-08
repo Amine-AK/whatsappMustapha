@@ -406,4 +406,20 @@ describe("the whole-account message when a payment paid more than its product", 
     expect(msg).not.toContain("من الدفعات العامة");
   });
 });
+
+describe("shop settings (the default sticker look)", () => {
+  it("saves a setting, replaces it, and keeps it through the sheet", () => {
+    let l = applyOp(EMPTY_LEDGER, op({ type: "setting.save", key: "sticker-look", value: '{"priceSize":20}' })).ledger;
+    expect(l.settings).toHaveLength(1);
+    expect(l.settings[0]).toMatchObject({ key: "sticker-look", value: '{"priceSize":20}' });
+    l = applyOp(l, op({ type: "setting.save", key: "sticker-look", value: '{"priceSize":18}' })).ledger;
+    expect(l.settings.map((x) => x.value)).toEqual(['{"priceSize":18}']);
+    const rows = ledgerToRows(l, "2026-11-08");
+    expect(rowsToLedger({ settings: [...rows.settings.values()] }).settings).toEqual(l.settings);
+  });
+  it("refuses a bad key or a value too big", () => {
+    expect(applyOp(EMPTY_LEDGER, op({ type: "setting.save", key: "Bad Key!", value: "{}" })).result).toBe("invalid");
+    expect(applyOp(EMPTY_LEDGER, op({ type: "setting.save", key: "sticker-look", value: "x".repeat(20_001) })).result).toBe("invalid");
+  });
+});
 });

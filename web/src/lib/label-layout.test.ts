@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isLandscape, moveBy, resetMoves, resizeBy, barcodeFit, contentBox, contentSize, DEFAULT_SETUP, pageCss, pageGroups, paperWidth, pitch, sanitizeSetup } from "./label-layout";
+import { isLandscape, lookOf, moveBy, resetMoves, resizeBy, sameLook, withLook, barcodeFit, contentBox, contentSize, DEFAULT_SETUP, pageCss, pageGroups, paperWidth, pitch, sanitizeSetup } from "./label-layout";
 
 describe("sticker layout", () => {
   it("places stickers every h + gap mm", () => {
@@ -94,5 +94,20 @@ describe("sticker layout", () => {
     expect(s.moves.price).toEqual({ x: 3, y: 0 });
     expect(s.moves.code).toEqual({ x: 0, y: 0 });
     expect(resetMoves(s).moves.price).toEqual({ x: 0, y: 0 });
+  });
+
+  it("shares the look, keeps each device's printer settings", () => {
+    const pc = sanitizeSetup({ gap: 2.6, dx: 3, mode: "strip", priceSize: 14, barH: 12 });
+    const designed = sanitizeSetup({ gap: 0, dx: -1, mode: "pages", priceSize: 20, barH: 18, moves: { price: { x: 4, y: 0 } } });
+    const look = lookOf(designed);
+    expect(look).not.toHaveProperty("gap");
+    expect(look).not.toHaveProperty("lookBase");
+    const next = withLook(pc, JSON.parse(JSON.stringify(look)));
+    expect([next.priceSize, next.barH, next.moves.price.x]).toEqual([20, 18, 4]);
+    expect([next.gap, next.dx, next.mode]).toEqual([2.6, 3, "strip"]);
+    expect(sameLook(next, designed)).toBe(true);
+    expect(sameLook(pc, designed)).toBe(false);
+    // A broken saved look falls back to the defaults, printer settings still kept.
+    expect(withLook(pc, "garbage").gap).toBe(2.6);
   });
 });

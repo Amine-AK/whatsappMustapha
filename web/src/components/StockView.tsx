@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { freshShopCode, isEan13, isShopCode, newShopCode, shopCodeOf as shopCodeOfItem, usedCodes } from "@/lib/barcode";
 import { downloadStickerPng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
-import { CONDITIONS, newLedgerId, nowParts, productCodes, type Condition, type StockItem } from "@/lib/ledger";
+import { CONDITIONS, newLedgerId, nowParts, productCodes, STICKER_LOOK_KEY, type Condition, type StockItem } from "@/lib/ledger";
 import { displayDate, SHOP } from "@/lib/receipt";
 import { currentSeller, findByCode, normalizeText, parseCodes, round2, searchStock } from "@/lib/shop";
 import { fixAzertyDigits } from "@/lib/scanner-input";
@@ -329,7 +329,7 @@ function StockForm({
 }) {
   const ledger = data.ledger!;
   // The sticker settings of this device: the downloaded image looks like the printed sticker.
-  const [labelSetup] = useLabelSetup();
+  const [labelSetup] = useLabelSetup(ledger.settings.find((x) => x.key === STICKER_LOOK_KEY));
   // The new product's id, known before saving so its shop barcode can be made from it.
   const [newId] = useState(() => newLedgerId("I"));
   // A new product saved without any code: ask to make the shop's barcode first.

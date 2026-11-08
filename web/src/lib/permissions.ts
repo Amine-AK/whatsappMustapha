@@ -26,6 +26,8 @@ export function opAllowed(me: Me, op: LedgerOp): boolean {
       return any("payment", "sell_credit");
     case "stock.add":
     case "category.save":
+    // The default sticker look: whoever prints stickers (owner, stock manager).
+    case "setting.save":
       return any("stock_add");
     case "stock.adjust":
       // The stock manager adds deliveries; taking stock out needs full stock rights.

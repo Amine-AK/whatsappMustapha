@@ -546,6 +546,14 @@ input[type="date"] { min-height: 44px; }
 .sticker-editor-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; min-height: 36px; }
 .sticker-editor-size { display: inline-flex; gap: 4px; }
 .sticker-editor-size .icon-btn { min-height: 34px; min-width: 34px; padding: 0; font-size: 18px; }
+/* Is this the shop's default sticker look? (LabelPrint.tsx) */
+.look-bar {
+  width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; border-radius: 10px; background: var(--warn-soft); color: var(--warn);
+}
+.look-bar.is-default { background: var(--accent-soft); color: var(--accent); justify-content: center; }
+.look-bar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.look-bar .small-btn { min-height: 36px; padding: 0 12px; font-size: 14px; }
 /* 🔄 / ⬇️ under the sticker, so they never cover it in the editor. */
 .preview-tools { display: flex; gap: 8px; }
 .preview-tools .icon-btn { min-height: 36px; min-width: 36px; padding: 0; font-size: 16px; }
