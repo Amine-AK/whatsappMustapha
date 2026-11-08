@@ -5,8 +5,9 @@ import { createPortal } from "react-dom";
 import { ean13Modules, freshShopCode, newShopCode, shopCodeOf, usedCodes, withShopCode } from "@/lib/barcode";
 import { downloadStickerPng } from "@/lib/barcode-image";
 import { money } from "@/lib/format";
-import { barcodeFit, contentSize, pageCss, pageGroups, isLandscape, paperWidth, pitch, sheetSize, type LabelSetup, type Part } from "@/lib/label-layout";
-import { newLedgerId, nowParts, productCodes, type StockItem } from "@/lib/ledger";
+import { barcodeFit, contentSize, lookOf, pageCss, pageGroups, isLandscape, paperWidth, pitch, sheetSize, type LabelSetup, type Part } from "@/lib/label-layout";
+import { newLedgerId, nowParts, productCodes, STICKER_LOOK_KEY, type StockItem } from "@/lib/ledger";
+import { can } from "@/lib/roles";
 import { SHOP } from "@/lib/receipt";
 import { currentSeller, searchStock } from "@/lib/shop";
 import { Modal } from "./Modal";
@@ -41,7 +42,14 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
   const [paper, setPaper] = useState<Paper>("roll");
   const [showPrice, setShowPrice] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [setup, setSetup] = useLabelSetup();
+  // The look follows the shop default (setting in the sheet); changes here are a draft until saved as default.
+  const [setup, setSetup, lookDefault] = useLabelSetup(data.ledger!.settings.find((x) => x.key === STICKER_LOOK_KEY));
+  const canSaveDefault = can(data.me, "stock_add");
+
+  function saveDefault() {
+    data.run("الإعداد العادي ديال الملصقات", { type: "setting.save", key: STICKER_LOOK_KEY, value: JSON.stringify(lookOf(setup)) });
+    onToast("تسجل كإعداد عادي: نفس الشكل فجميع الأجهزة");
+  }
   // Calibration print: a few stickers with their edges drawn, nothing saved.
   const [calibrating, setCalibrating] = useState(false);
   const roll = paper === "roll";
@@ -289,6 +297,31 @@ export function LabelPrint({ data, preselect, onClose, onToast }: { data: Ledger
               </StickerEditor>
             ) : (
               placed(labels[0] ?? stock[0] ?? SAMPLE, 0, true)
+            )}
+            {roll && (
+              <div className={`look-bar${lookDefault.same ? " is-default" : ""}`} role="status">
+                <span className="small">
+                  {lookDefault.same
+                    ? "✓ هادا هو الشكل العادي ديال المحل (فجميع الأجهزة)"
+                    : lookDefault.exists
+                      ? "✏️ تبديلات ما تسجلاتش كشكل عادي"
+                      : "هاد الشكل باقي ما تسجلش كشكل عادي ديال المحل"}
+                </span>
+                {!lookDefault.same && (
+                  <span className="look-bar-actions">
+                    {canSaveDefault && (
+                      <button type="button" className="btn primary small-btn" onClick={saveDefault}>
+                        💾 حفظ كإعداد عادي
+                      </button>
+                    )}
+                    {lookDefault.exists && (
+                      <button type="button" className="btn small-btn" onClick={lookDefault.reset}>
+                        ↺ رجع للعادي
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
             )}
             {/* The product shown: change its barcode, or save it as an image. */}
             {labels[0] && (

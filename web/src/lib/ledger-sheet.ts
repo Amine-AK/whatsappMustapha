@@ -12,6 +12,7 @@ import {
   type Ledger,
   type Payment,
   type PaymentKind,
+  type Setting,
   type Purchase,
   type Sale,
   type StockItem,
@@ -29,10 +30,11 @@ export const TABS = {
   sales: "المبيعات",
   moves: "حركات المخزون",
   closings: "الصندوق اليومي",
+  settings: "الإعدادات",
 } as const;
 
 /** Tabs added with the shop features: created on their own in sheets set up before them. */
-export const SHOP_KEYS = ["stock", "categories", "sales", "moves", "closings"] as const;
+export const SHOP_KEYS = ["stock", "categories", "sales", "moves", "closings", "settings"] as const;
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { name: "كهرومنزلي كبير", description: "ثلاجات، غسالات، كليماتيزورات، فرنات…", marginTarget: 15, icon: "🧊" },
@@ -62,6 +64,7 @@ export const HEADERS: Record<TableKey, string[]> = {
   changes: ["رقم", "رقم الزبون", "الزبون", "التاريخ", "الطريطة القديمة", "الطريطة الجديدة", "المدة القديمة", "المدة الجديدة", "السبب", "تاريخ الإضافة"],
   stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "الكود (QR / باركود / S/N)", "ملاحظات", "تاريخ الإضافة", "آخر تعديل", "أكواد أخرى (موردين آخرين)"],
   categories: ["الفئة", "الوصف", "هامش الربح المستهدف %", "الأيقونة"],
+  settings: ["المفتاح", "القيمة (JSON)", "آخر تعديل"],
   sales: [
     "رقم البيع", "رقم التيكي", "التاريخ", "الساعة", "السلعة", "الفئة", "رقم السلعة فالمخزون", "الكمية",
     "ثمن الشراء", "الثمن المقترح", "ثمن البيع", "الربح", "النوع", "رقم الزبون", "الزبون", "رقم العملية",
@@ -180,6 +183,11 @@ export function rowToCategory(r: unknown[]): Category | null {
   return name ? { name, description: s(r[1]), marginTarget: n(r[2]), icon: s(r[3]) } : null;
 }
 
+export function rowToSetting(r: unknown[]): Setting | null {
+  const key = s(r[0]);
+  return key ? { key, value: s(r[1]), updatedAt: s(r[2]) } : null;
+}
+
 export function rowToSale(r: unknown[]): Sale | null {
   const id = s(r[0]);
   if (!id) return null;
@@ -244,6 +252,7 @@ export function rowsToLedger(tables: Partial<Record<TableKey, unknown[][]>>): Le
     sales: rows("sales").map(rowToSale).filter(keep),
     moves: rows("moves").map(rowToMove).filter(keep),
     closings: rows("closings").map(rowToClosing).filter(keep),
+    settings: rows("settings").map(rowToSetting).filter(keep),
   };
 }
 
@@ -314,7 +323,8 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
       ],
     ]),
   );
-  return { clients, purchases, payments, changes, stock, categories, sales, moves, closings };
+  const settings = new Map<string, Cell[]>(ledger.settings.map((x) => [x.key, [x.key, x.value, x.updatedAt]]));
+  return { clients, purchases, payments, changes, stock, categories, sales, moves, closings, settings };
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;

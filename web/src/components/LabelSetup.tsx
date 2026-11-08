@@ -10,20 +10,47 @@ import {
   paperWidth,
   pitch,
   RECEIPT_PRINTER,
+  sameLook,
   sanitizeSetup,
+  withLook,
   type LabelSetup,
   type NumKey,
   type Rotation,
 } from "@/lib/label-layout";
+import type { Setting } from "@/lib/ledger";
 
 const KEY = "label-setup";
 // Settings saved by the old print tests: kept when moving to this setup.
 const OLD_TEST_KEY = "label-print-test";
 const OLD_SIZE_KEY = "label-size";
 
-/** The printer settings for stickers, saved on this device (each PC has its own printer). */
-export function useLabelSetup(): [LabelSetup, (s: LabelSetup) => void] {
+/** The shop's default sticker look (setting «sticker-look»), and how this device stands with it. */
+export interface LookDefault {
+  /** A default was saved for the shop. */
+  exists: boolean;
+  /** This device's sticker looks exactly like the default. */
+  same: boolean;
+  /** Back to the default look (printer settings of this device kept). */
+  reset: () => void;
+}
+
+function parseLook(shared: Setting | undefined): unknown {
+  try {
+    return shared?.value ? JSON.parse(shared.value) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The sticker settings on this device. The look (size, lines, sizes,
+ * positions…) follows the shop default saved in the sheet; changing it here
+ * is a draft until «حفظ كإعداد عادي». A default saved later (on any device)
+ * replaces the draft. The printer settings (gap, paper, shift…) stay this device's own.
+ */
+export function useLabelSetup(shared?: Setting): [LabelSetup, (s: LabelSetup) => void, LookDefault] {
   const [s, setS] = useState(DEFAULT_SETUP);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     try {
       const saved = localStorage.getItem(KEY);
@@ -31,23 +58,49 @@ export function useLabelSetup(): [LabelSetup, (s: LabelSetup) => void] {
         const v = JSON.parse(saved);
         // Saved before the line choices existed: start from the new default lines (no shop name).
         if (v && !("showDigits" in v)) delete v.showShop;
-        return setS(sanitizeSetup(v));
+        setS(sanitizeSetup(v));
+      } else {
+        const size = localStorage.getItem(OLD_SIZE_KEY);
+        const dims = size === "40x30" ? { w: 40, h: 30 } : size === "50x30" ? { w: 50, h: 30 } : {};
+        const old = JSON.parse(localStorage.getItem(OLD_TEST_KEY) ?? "null");
+        if (old) setS(sanitizeSetup({ ...LABEL_PRINTER, ...dims, rotate: old.rotate, dx: old.dx, dy: old.dy, driverPage: old.page === "auto" }));
+        else if (dims.w) setS(sanitizeSetup({ ...DEFAULT_SETUP, ...dims }));
       }
-      const size = localStorage.getItem(OLD_SIZE_KEY);
-      const dims = size === "40x30" ? { w: 40, h: 30 } : size === "50x30" ? { w: 50, h: 30 } : {};
-      const old = JSON.parse(localStorage.getItem(OLD_TEST_KEY) ?? "null");
-      if (old) setS(sanitizeSetup({ ...LABEL_PRINTER, ...dims, rotate: old.rotate, dx: old.dx, dy: old.dy, driverPage: old.page === "auto" }));
-      else if (dims.w) setS(sanitizeSetup({ ...DEFAULT_SETUP, ...dims }));
     } catch {}
+    setLoaded(true);
   }, []);
+
+  const save = (next: LabelSetup) => {
+    const clean = sanitizeSetup(next);
+    setS(clean);
+    try {
+      localStorage.setItem(KEY, JSON.stringify(clean));
+    } catch {}
+  };
+
+  // A default newer than the one this device follows (saved here or elsewhere): take it.
+  const sharedAt = shared?.updatedAt ?? "";
+  useEffect(() => {
+    if (!loaded || !sharedAt) return;
+    setS((cur) => {
+      if (cur.lookBase && cur.lookBase >= sharedAt) return cur;
+      const next = { ...withLook(cur, parseLook(shared)), lookBase: sharedAt };
+      try {
+        localStorage.setItem(KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when a newer default arrives
+  }, [loaded, sharedAt]);
+
+  const look = parseLook(shared);
   return [
     s,
-    (next) => {
-      const clean = sanitizeSetup(next);
-      setS(clean);
-      try {
-        localStorage.setItem(KEY, JSON.stringify(clean));
-      } catch {}
+    save,
+    {
+      exists: Boolean(shared && look),
+      same: Boolean(shared && look) && sameLook(s, withLook(s, look)),
+      reset: () => shared && look && save({ ...withLook(s, look), lookBase: sharedAt }),
     },
   ];
 }

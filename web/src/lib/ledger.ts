@@ -180,6 +180,16 @@ export interface CaisseClose {
   createdAt: string;
 }
 
+/** A shop-wide setting shared by every device (e.g. the default sticker look), as JSON text. */
+export interface Setting {
+  key: string;
+  value: string;
+  updatedAt: string;
+}
+
+/** Setting keys in use. */
+export const STICKER_LOOK_KEY = "sticker-look";
+
 export interface Ledger {
   clients: Client[];
   purchases: Purchase[];
@@ -190,10 +200,11 @@ export interface Ledger {
   sales: Sale[];
   moves: StockMove[];
   closings: CaisseClose[];
+  settings: Setting[];
 }
 
 export function emptyLedger(): Ledger {
-  return { clients: [], purchases: [], payments: [], changes: [], stock: [], categories: [], sales: [], moves: [], closings: [] };
+  return { clients: [], purchases: [], payments: [], changes: [], stock: [], categories: [], sales: [], moves: [], closings: [], settings: [] };
 }
 
 export const EMPTY_LEDGER: Ledger = emptyLedger();
@@ -262,6 +273,8 @@ type OpBody =
   | { type: "stock.adjust"; move: StockMove }
   | { type: "stock.delete"; id: string }
   | { type: "category.save"; category: Category }
+  /** A shop-wide setting (key → JSON text), e.g. the default sticker look. */
+  | { type: "setting.save"; key: string; value: string }
   /** Lines sold together; a credit sale also brings the purchases for the customer's account. */
   | { type: "sale.add"; lines: Sale[]; purchases: Purchase[] }
   /** Cancel one line: the product goes back to stock, its purchase leaves the customer's account. */
@@ -570,6 +583,16 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       if (old && old.description === clean.description && old.marginTarget === clean.marginTarget && old.icon === clean.icon) return { ledger, result: "already" };
       const categories = old ? ledger.categories.map((x) => (x.name === clean.name ? clean : x)) : [...ledger.categories, clean];
       return { ledger: { ...ledger, categories }, result: "ok" };
+    }
+    case "setting.save": {
+      if (typeof op.key !== "string" || !/^[a-z0-9-]{1,40}$/.test(op.key) || typeof op.value !== "string" || op.value.length > 20_000) {
+        return invalid(ledger, "الإعداد غير صحيح");
+      }
+      const old = ledger.settings.find((x) => x.key === op.key);
+      if (old?.updatedAt === op.at) return { ledger, result: "already" };
+      const next = { key: op.key, value: op.value, updatedAt: op.at };
+      const settings = old ? ledger.settings.map((x) => (x.key === op.key ? next : x)) : [...ledger.settings, next];
+      return { ledger: { ...ledger, settings }, result: "ok" };
     }
     case "sale.add": {
       const lines = Array.isArray(op.lines) ? op.lines : [];

@@ -399,6 +399,19 @@ preview draws the sticker's edge (red dashes) and the space inside the margins.
   4. Receipt printer driver (*Printing preferences*): turn off the automatic
      cut and the paper feed after printing.
 
+### 💾 The shop's default sticker look
+
+Under the sticker preview a line says whether this is the shop's default look.
+**💾 حفظ كإعداد عادي** saves the current look (size, margins, rotation, lines,
+sizes, bold price, bar height / width, digits, spacing, finger moves) in the
+sheet tab «الإعدادات»: every device then uses it, for printing and for every
+barcode image download (sticker window and product form). Changing the
+sticker afterwards is a draft on that device («✏️ تبديلات ما تسجلاتش»), until
+saved again or undone with **↺ رجع للعادي**. A default saved on another device
+replaces the draft. The printer settings (gap, paper width, shift, printer
+type, Paysage, driver page) stay each device's own. Owner and stock manager
+can save the default.
+
 ### ✋ Editing the sticker with the fingers (like Canva)
 
 The sticker preview in the sticker window is an editor, zoomed to the screen width:

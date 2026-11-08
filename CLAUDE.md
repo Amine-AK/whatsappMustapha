@@ -52,12 +52,13 @@ UI calls data.run(label, ...ops)  →  op queued, applied locally (optimistic), 
   `applyOp`). Op types: `client.add/update/delete/installment`,
   `purchase.add/update/delete`, `payment.add/update/delete`,
   `stock.add/update/adjust/delete`, `sale.add/delete`, `category.save`,
-  `caisse.close`. Edits carry `base` (= record's `updatedAt`) → conflicts.
+  `caisse.close`, `setting.save` (shop-wide settings, key → JSON text). Edits carry `base` (= record's `updatedAt`) → conflicts.
 - Server checks permissions per op: `src/app/api/sync/route.ts` +
   `src/lib/permissions.ts` (pure, tested) + `src/lib/access.ts`.
 - Sheet layout (tab names, columns, row ↔ object): `src/lib/ledger-sheet.ts`
   (`TABS`: الزبناء, المشتريات, الدفعات, تغييرات الطريطة, المخزون, الفئات,
-  المبيعات, حركات المخزون, الصندوق اليومي). Users tab: «المستخدمين» (`src/lib/users.ts`).
+  المبيعات, حركات المخزون, الصندوق اليومي, الإعدادات). New tabs go in `SHOP_KEYS`:
+  existing sheets get them created on first use (`ensureShopTabs` in `store.ts`). Users tab: «المستخدمين» (`src/lib/users.ts`).
   Archive tabs: `src/lib/store.ts`.
 - Credit math (remaining per customer and per product, payment split, due
   status): `summarizeClient`, `itemStatuses`, `paymentSplit` in `src/lib/ledger.ts`.
@@ -81,7 +82,8 @@ UI calls data.run(label, ...ops)  →  op queued, applied locally (optimistic), 
 | Reports screen | `components/ReportsView.tsx` |
 | Shop barcodes (EAN-13 starting with 2, new number) | `lib/barcode.ts` |
 | Sticker printing window (sizes, list, 🔄 / ⬇️, print pages) | `components/LabelPrint.tsx` |
-| Printer setup panel (gap, margins, shift, lines, sizes, rotation, Paysage, driver page) | `components/LabelSetup.tsx` (UI + `useLabelSetup`) |
+| Printer setup panel (gap, margins, shift, lines, sizes, rotation, Paysage, driver page) | `components/LabelSetup.tsx` (UI + `useLabelSetup(shared)`) |
+| Shop default sticker look («💾 حفظ كإعداد عادي», setting `sticker-look`): look shared via the sheet, printer fields (`PRINTER_FIELDS`: gap, pageW, dx, dy, mode, landscape, driverPage) per device | `lib/label-layout.ts` (`lookOf`, `withLook`, `sameLook`), `useLabelSetup` in `components/LabelSetup.tsx`, bar in `components/LabelPrint.tsx` |
 | Sticker layout math (pitch, pages, @page CSS, moves, resize) | `lib/label-layout.ts` (pure, tested) |
 | Canva-like sticker editor (1 finger move, 2 fingers resize) | `components/StickerEditor.tsx` |
 | Barcode / sticker PNG download | `lib/barcode-image.ts` |
