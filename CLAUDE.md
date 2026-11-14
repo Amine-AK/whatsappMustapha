@@ -48,6 +48,11 @@ useLedger.ts ── snapshot + queue of ops ──► /api/sync ─► store.syn
 UI calls data.run(label, ...ops)  →  op queued, applied locally (optimistic), sent when online
 ```
 
+- Sync loop (`useLedger.ts`): accepted ops are applied to the local snapshot as
+  they leave the queue (the screen must never fall back to the old copy while
+  `/api/data` reloads, or edits made then get a stale `base` → «conflict»);
+  ops added while a sync runs are sent right after it (`again` flag).
+
 - **All changes are ops** (`LedgerOp` in `src/lib/ledger.ts`, applied by
   `applyOp`). Op types: `client.add/update/delete/installment`,
   `purchase.add/update/delete`, `payment.add/update/delete`,
