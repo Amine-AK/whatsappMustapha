@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiFetch } from "@/lib/client";
+import { thisDevice } from "@/lib/change-origin";
 import { idbGet, idbSet } from "@/lib/idb";
 import {
   applyOps,
@@ -28,6 +29,8 @@ export interface Queued {
   label: string;
   status: "pending" | "failed";
   error?: string;
+  /** Why it failed: "conflict" = the record changed meanwhile (details: lib/change-origin.ts). */
+  result?: OpResult;
 }
 
 interface Snapshot {
@@ -167,7 +170,7 @@ export function useLedger(): LedgerState {
             const r = byId.get(q.op.opId);
             if (!r) return [q];
             if (r.result === "ok" || r.result === "already") return [];
-            return [{ ...q, status: "failed" as const, error: r.message || (r.result === "conflict" ? "تعارض" : "مرفوض") }];
+            return [{ ...q, status: "failed" as const, result: r.result, error: r.message || (r.result === "conflict" ? "تعارض" : "مرفوض") }];
           }),
         );
       }
@@ -254,7 +257,9 @@ export function useLedger(): LedgerState {
     loadError: ledger ? "" : loadError,
     syncError,
     run: (label, ...ops) => {
-      const items = ops.map((o) => ({ op: { ...o, opId: newLedgerId("O"), at: stamp() } as LedgerOp, label, status: "pending" as const }));
+      // Who and where (the server re-stamps the account): shown if this change ever conflicts.
+      const origin = { by: me?.name ?? "", device: thisDevice() };
+      const items = ops.map((o) => ({ op: { ...o, opId: newLedgerId("O"), at: stamp(), ...origin } as LedgerOp, label, status: "pending" as const }));
       saveQueue([...queueRef.current, ...items]);
       void sync();
     },

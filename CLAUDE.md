@@ -37,7 +37,7 @@ reminders. Installable PWA, used on phones and the shop PC, works offline.
 - Per-device settings go in `localStorage` (try/catch every access). Keys in use:
   `view`, `theme`, `label-setup`, `label-size`, `label-price`, `receipt-paper`,
   `scanner-camera`, `backup-last`, `backup-snooze`, `ledger-queue`,
-  `ledger-snapshot`, `label-print-test` (old, migrated).
+  `ledger-snapshot`, `device-id`, `label-print-test` (old, migrated).
 
 ## Data flow (credit + shop ledger)
 
@@ -52,6 +52,12 @@ UI calls data.run(label, ...ops)  →  op queued, applied locally (optimistic), 
   they leave the queue (the screen must never fall back to the old copy while
   `/api/data` reloads, or edits made then get a stale `base` → «conflict»);
   ops added while a sync runs are sent right after it (`again` flag).
+- Change origin (`src/lib/change-origin.ts`): each op carries `device` (label made
+  on the device: system · browser · `#id` from localStorage `device-id`) and `by`
+  (account name, **stamped by the server** in `/api/sync`). Products keep the last
+  ones (`by`, `device`; sheet columns «آخر تعديل من», «الجهاز»). A refused edit
+  (`result: "conflict"`) shows `conflictDetails()` in `SyncBar.tsx`; refused
+  changes are filtered by `visibleFailures()` (= `opAllowed`) for the logged-in account.
 
 - **All changes are ops** (`LedgerOp` in `src/lib/ledger.ts`, applied by
   `applyOp`). Op types: `client.add/update/delete/installment`,
@@ -100,7 +106,7 @@ UI calls data.run(label, ...ops)  →  op queued, applied locally (optimistic), 
 | Who may do what (UI hides, server enforces) | `lib/roles.ts` (`can`, `seesCost`), `lib/permissions.ts` |
 | Route protection (what needs login) | `src/proxy.ts` (matcher: login, PWA files, `/scanner/` are public) |
 | Offline / PWA | `public/sw.js` (cache version `VERSION`), `components/RegisterServiceWorker.tsx`, `components/InstallButton.tsx`, `app/manifest.ts`, `lib/idb.ts` |
-| Sync state bar | `components/SyncBar.tsx` |
+| Sync state bar, refused changes (who / device / what differs, filtered by permissions) | `components/SyncBar.tsx`, `lib/change-origin.ts` |
 | Header menu (backup, theme, logout) | `components/TopMenu.tsx`; theme `lib/theme.ts` |
 | Excel backup | `lib/xlsx.ts`, `lib/backup.ts`, `components/BackupDialog.tsx`, `app/api/export` |
 | Archive (old customers) | `components/ArchiveView.tsx`, `app/api/archive/*`, `lib/store.ts` |

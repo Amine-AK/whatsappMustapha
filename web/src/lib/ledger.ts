@@ -94,6 +94,9 @@ export interface StockItem {
   notes: string;
   createdAt: string;
   updatedAt: string;
+  /** Account and device of the last change (see lib/change-origin.ts). "" for older rows. */
+  by?: string;
+  device?: string;
 }
 
 /** Product family (الفئات), used to group sales in the reports. */
@@ -286,7 +289,13 @@ export type LedgerOp = OpBody & {
   opId: string;
   /** When it was made (ISO). Becomes the record's updatedAt. */
   at: string;
+  /** Account that made it (stamped by the server) and the device it came from (see lib/change-origin.ts). */
+  by?: string;
+  device?: string;
 };
+
+/** Who and where a change came from, kept on the product it changes. */
+const origin = (op: LedgerOp) => ({ by: op.by ?? "", device: op.device ?? "" });
 
 export type OpResult = "ok" | "already" | "conflict" | "invalid";
 
@@ -433,7 +442,7 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       const cancelledIds = new Set(cancelled.map((s) => s.id));
       return {
         ledger: {
-          ...restock(ledger, cancelled, op.at),
+          ...restock(ledger, cancelled, op),
           clients: ledger.clients.filter((c) => c.id !== op.id),
           purchases: ledger.purchases.filter((p) => p.clientId !== op.id),
           payments: ledger.payments.filter((p) => p.clientId !== op.id),
@@ -493,7 +502,7 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       const cancelled = ledger.sales.filter((s) => s.purchaseId === op.id);
       return {
         ledger: {
-          ...restock(ledger, cancelled, op.at),
+          ...restock(ledger, cancelled, op),
           purchases: ledger.purchases.filter((p) => p.id !== op.id),
           sales: ledger.sales.filter((s) => s.purchaseId !== op.id),
           // Payments for that item stay, as general payments.
@@ -535,14 +544,14 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       const item = { ...op.item, codes: op.item.codes ?? [] };
       const err = checkStock(item) ?? codeTaken(ledger, productCodes(item), item.id);
       if (err) return invalid(ledger, err);
-      return { ledger: { ...ledger, stock: [...ledger.stock, { ...item, updatedAt: op.at }] }, result: "ok" };
+      return { ledger: { ...ledger, stock: [...ledger.stock, { ...item, updatedAt: op.at, ...origin(op) }] }, result: "ok" };
     }
     case "stock.update": {
       const s = ledger.stock.find((x) => x.id === op.id);
       if (!s) return invalid(ledger, "هاد السلعة ما بقاتش فالمخزون");
       if (s.updatedAt === op.at) return { ledger, result: "already" };
       if (s.updatedAt !== op.base) return { ledger, result: "conflict", message: CONFLICT };
-      const next = { ...s, ...pick<StockItem>(op.patch, ["item", "category", "condition", "buyPrice", "sellPrice", "serial", "codes", "notes"]), updatedAt: op.at };
+      const next = { ...s, ...pick<StockItem>(op.patch, ["item", "category", "condition", "buyPrice", "sellPrice", "serial", "codes", "notes"]), updatedAt: op.at, ...origin(op) };
       const err = checkStock(next) ?? codeTaken(ledger, productCodes(next), next.id);
       if (err) return invalid(ledger, err);
       return { ledger: { ...ledger, stock: replace(ledger.stock, s.id, next) }, result: "ok" };
@@ -564,7 +573,7 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       const have = productCodes(s).map((x) => x.toLowerCase());
       const added = codesIn.map((x) => x.trim()).filter((x) => !have.includes(x.toLowerCase()));
       // A difference, not a new total: counts from two phones add up instead of overwriting each other.
-      const next = { ...s, quantity: s.quantity + m.delta, codes: [...s.codes, ...added], updatedAt: op.at };
+      const next = { ...s, quantity: s.quantity + m.delta, codes: [...s.codes, ...added], updatedAt: op.at, ...origin(op) };
       return { ledger: { ...ledger, stock: replace(ledger.stock, s.id, next), moves: [...ledger.moves, m] }, result: "ok" };
     }
     case "stock.delete": {
@@ -623,7 +632,7 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
       // Products from stock go out (unknown ones are simply not tracked).
       const out = new Map<string, number>();
       for (const l of lines) if (l.stockId && ledger.stock.some((s) => s.id === l.stockId)) out.set(l.stockId, (out.get(l.stockId) ?? 0) + l.quantity);
-      const stock = ledger.stock.map((s) => (out.has(s.id) ? { ...s, quantity: s.quantity - out.get(s.id)!, updatedAt: op.at } : s));
+      const stock = ledger.stock.map((s) => (out.has(s.id) ? { ...s, quantity: s.quantity - out.get(s.id)!, updatedAt: op.at, ...origin(op) } : s));
       return {
         ledger: {
           ...ledger,
@@ -637,7 +646,7 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
     case "sale.delete": {
       const s = ledger.sales.find((x) => x.id === op.id);
       if (!s) return { ledger, result: "already" };
-      const after = restock(ledger, [s], op.at);
+      const after = restock(ledger, [s], op);
       return {
         ledger: {
           ...after,
@@ -663,11 +672,12 @@ export function applyOp(ledger: Ledger, op: LedgerOp): Applied {
 }
 
 /** Cancelled sales give their products back to stock. */
-function restock(ledger: Ledger, sales: Sale[], at: string): Ledger {
+function restock(ledger: Ledger, sales: Sale[], op: LedgerOp): Ledger {
+  const at = op.at;
   const back = new Map<string, number>();
   for (const s of sales) if (s.stockId) back.set(s.stockId, (back.get(s.stockId) ?? 0) + s.quantity);
   if (!back.size) return ledger;
-  return { ...ledger, stock: ledger.stock.map((x) => (back.has(x.id) ? { ...x, quantity: x.quantity + back.get(x.id)!, updatedAt: at } : x)) };
+  return { ...ledger, stock: ledger.stock.map((x) => (back.has(x.id) ? { ...x, quantity: x.quantity + back.get(x.id)!, updatedAt: at, ...origin(op) } : x)) };
 }
 
 /** A payment can only point to a purchase of the same customer. */

@@ -475,10 +475,14 @@ input[type="date"] { min-height: 44px; }
 
 .sync-failed { border-top: 1px solid var(--line); padding-top: 6px; }
 .sync-failed-toggle { border: 0; background: none; padding: 4px 0; color: var(--danger); font-weight: 500; cursor: pointer; text-align: start; }
-.sync-failed ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
-.sync-failed li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--danger-soft); }
-.sync-failed li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
-.sync-failed li .small { color: var(--danger); }
+.sync-failed > ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
+.sync-failed > ul > li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--danger-soft); }
+.sync-failed > ul > li > div:first-child { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.sync-failed > ul > li > div > p.small { color: var(--danger); }
+.sync-failed li .conflict-info { margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: var(--surface); color: var(--ink); display: grid; gap: 3px; }
+.sync-failed li .conflict-info ul { margin: 0; padding-inline-start: 18px; list-style: disc; display: grid; gap: 2px; }
+.sync-failed li .conflict-info p { margin: 0; }
+.conflict-info .nowrap { white-space: nowrap; }
 .sync-failed-actions { display: flex; gap: 6px; flex: none; }
 
 .card-tags { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
