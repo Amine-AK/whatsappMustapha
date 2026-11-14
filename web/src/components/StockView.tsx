@@ -378,8 +378,13 @@ function StockForm({
     save(codeList);
   }
 
+  // Saved once: a double tap on «حفظ» must not send the same edit twice (the 2nd would be refused).
+  const saved = useRef(false);
+
   /** Saves the product with these codes; `print` opens its stickers after a new product. */
   function save(codes: string[], print = false) {
+    if (saved.current) return;
+    saved.current = true;
     const sell = parseAmount(v.sellPrice || String(suggested || ""));
     const at = new Date().toISOString();
     const fields = { item: v.item.trim(), category: categoryName, condition: v.condition, buyPrice: buy || 0, sellPrice: sell, serial: codes[0] ?? "", codes: codes.slice(1), notes: v.notes.trim() };

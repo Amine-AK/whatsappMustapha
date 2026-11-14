@@ -93,6 +93,9 @@ export function useLedger(): LedgerState {
   const snapRef = useRef<Snapshot | null>(null);
   const queueRef = useRef<Queued[]>([]);
   const running = useRef(false);
+  // A change made while a sync was running: send it as soon as that sync ends (not 30 s later).
+  const again = useRef(false);
+  const syncRef = useRef<() => Promise<void>>(async () => {});
 
   const saveSnapshot = useCallback((s: Snapshot) => {
     snapRef.current = s;
@@ -121,7 +124,12 @@ export function useLedger(): LedgerState {
   }, [saveSnapshot]);
 
   const sync = useCallback(async () => {
-    if (running.current || !navigator.onLine) return;
+    if (!navigator.onLine) return;
+    if (running.current) {
+      again.current = true;
+      return;
+    }
+    again.current = false;
     running.current = true;
     setSyncing(true);
     setSyncError("");
@@ -144,6 +152,16 @@ export function useLedger(): LedgerState {
           continue;
         }
         const byId = new Map(results.map((r) => [r.opId, r]));
+        // Accepted changes go into the local copy now, as they leave the queue: until the fresh
+        // copy arrives (pull below) the screen must not go back to the old version, or an edit
+        // made in that moment would be based on it and refused as «changed from another device».
+        const accepted = queueRef.current.filter((q) => {
+          const r = byId.get(q.op.opId);
+          return r && (r.result === "ok" || r.result === "already");
+        });
+        if (accepted.length && snapRef.current) {
+          saveSnapshot({ ...snapRef.current, ledger: applyOps(snapRef.current.ledger, accepted.map((q) => q.op)) });
+        }
         saveQueue(
           queueRef.current.flatMap((q) => {
             const r = byId.get(q.op.opId);
@@ -160,8 +178,10 @@ export function useLedger(): LedgerState {
     } finally {
       running.current = false;
       setSyncing(false);
+      if (again.current && queueRef.current.some((q) => q.status === "pending")) setTimeout(() => void syncRef.current(), 0);
     }
-  }, [pull, saveQueue]);
+  }, [pull, saveQueue, saveSnapshot]);
+  syncRef.current = sync;
 
   // Start: show what is on the device at once, then sync.
   useEffect(() => {
