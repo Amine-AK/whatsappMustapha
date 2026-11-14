@@ -399,6 +399,18 @@ preview draws the sticker's edge (red dashes) and the space inside the margins.
   4. Receipt printer driver (*Printing preferences*): turn off the automatic
      cut and the paper feed after printing.
 
+### Who changed a product, and refused changes
+
+Every change says which account made it (stamped by the server) and from which
+device («📱 Android · Chrome · #K3F9»: system, browser, a short id kept on the
+device). Products keep the last ones in the المخزون columns «آخر تعديل من» and
+«الجهاز». When an edit is refused because the product changed meanwhile, the
+red box in the sync bar says who changed it, from which device and when, and
+for each field what you wanted and what the sheet has now; then **طبقو**
+(apply on the current version) or **تجاهل**. A seller only sees refused changes
+for the services their account has (and no buy prices without cost rights),
+even if another account used the same device.
+
 ### 💾 The shop's default sticker look
 
 Under the sticker preview a line says whether this is the shop's default look.

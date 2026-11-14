@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { conflictDetails, visibleFailures } from "@/lib/change-origin";
+import { seesCost } from "@/lib/roles";
 import type { LedgerState } from "./useLedger";
 
 function timeOf(iso: string | null): string {
@@ -17,7 +19,9 @@ function timeOf(iso: string | null): string {
 /** Connection and sync state: offline, sending, waiting changes, refused changes. */
 export function SyncBar({ state }: { state: LedgerState }) {
   const [open, setOpen] = useState(false);
-  const { online, syncing, pendingCount, failed, lastSync, syncError } = state;
+  const { online, syncing, pendingCount, lastSync, syncError } = state;
+  // Only refused changes this account may make (another account may have used this device).
+  const failed = visibleFailures(state.me, state.failed);
 
   let tone = "ok";
   let text = `متزامن مع الـ Google Sheet${lastSync ? ` · ${timeOf(lastSync)}` : ""}`;
@@ -63,6 +67,7 @@ export function SyncBar({ state }: { state: LedgerState }) {
                   <div>
                     <strong>{q.label}</strong>
                     <p className="small">{q.error}</p>
+                    <ConflictInfo state={state} q={q} />
                   </div>
                   <div className="sync-failed-actions">
                     <button
@@ -85,5 +90,47 @@ export function SyncBar({ state }: { state: LedgerState }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** For an edit refused because the record changed meanwhile: who changed it, from where, when, and what differs. */
+function ConflictInfo({ state, q }: { state: LedgerState; q: LedgerState["failed"][number] }) {
+  if (q.result !== "conflict" || !state.ledger) return null;
+  const d = conflictDetails(q.op, state.ledger, seesCost(state.me));
+  if (!d) return null;
+  if (d.gone) return <p className="conflict-info small">🗑️ هاد المعلومات تحذفات من بعد.</p>;
+  return (
+    <div className="conflict-info small">
+      <p>
+        ✏️ تبدلات
+        {d.who && (
+          <>
+            {" "}من طرف <strong>«{d.who}»</strong>
+          </>
+        )}
+        {d.device && (
+          <>
+            {" "}· <bdi dir="ltr" className="nowrap">{d.device}</bdi>
+          </>
+        )}
+        {d.when && (
+          <>
+            {" "}· <bdi dir="ltr" className="nowrap">{d.when}</bdi>
+          </>
+        )}
+        {!d.who && !d.device && " (ما معروفش منين: تعديل قديم)"}
+      </p>
+      {d.changes.length > 0 ? (
+        <ul>
+          {d.changes.map((c) => (
+            <li key={c.label}>
+              {c.label}: ديالك «<bdi>{c.mine}</bdi>» · دابا «<bdi>{c.now}</bdi>»
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>اللي بدلتي هو نفس اللي كاين دابا فالورقة.</p>
+      )}
+    </div>
   );
 }

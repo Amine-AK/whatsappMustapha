@@ -62,7 +62,7 @@ export const HEADERS: Record<TableKey, string[]> = {
     "رقم الوصل", "رقم الزبون", "الزبون", "التاريخ", "الساعة", "المبلغ", "النوع", "رقم السلعة", "السلعة", "ملاحظات", "تاريخ الإضافة", "آخر تعديل",
   ],
   changes: ["رقم", "رقم الزبون", "الزبون", "التاريخ", "الطريطة القديمة", "الطريطة الجديدة", "المدة القديمة", "المدة الجديدة", "السبب", "تاريخ الإضافة"],
-  stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "الكود (QR / باركود / S/N)", "ملاحظات", "تاريخ الإضافة", "آخر تعديل", "أكواد أخرى (موردين آخرين)"],
+  stock: ["رقم السلعة", "السلعة", "الفئة", "الحالة", "ثمن الشراء", "ثمن البيع", "الكمية", "الكود (QR / باركود / S/N)", "ملاحظات", "تاريخ الإضافة", "آخر تعديل", "أكواد أخرى (موردين آخرين)", "آخر تعديل من", "الجهاز"],
   categories: ["الفئة", "الوصف", "هامش الربح المستهدف %", "الأيقونة"],
   settings: ["المفتاح", "القيمة (JSON)", "آخر تعديل"],
   sales: [
@@ -175,6 +175,8 @@ export function rowToStock(r: unknown[]): StockItem | null {
     createdAt: s(r[9]),
     updatedAt: s(r[10]),
     codes: lines(r[11]),
+    by: s(r[12]),
+    device: s(r[13]),
   };
 }
 
@@ -297,7 +299,7 @@ export function ledgerToRows(ledger: Ledger, today = todayISO()): Record<TableKe
   const stock = new Map<string, Cell[]>(
     ledger.stock.map((x) => [
       x.id,
-      [x.id, x.item, x.category, x.condition, x.buyPrice, x.sellPrice, x.quantity, x.serial, x.notes, x.createdAt, x.updatedAt, (x.codes ?? []).join("\n")],
+      [x.id, x.item, x.category, x.condition, x.buyPrice, x.sellPrice, x.quantity, x.serial, x.notes, x.createdAt, x.updatedAt, (x.codes ?? []).join("\n"), x.by ?? "", x.device ?? ""],
     ]),
   );
   const categories = new Map<string, Cell[]>(ledger.categories.map((c) => [c.name, [c.name, c.description, money(c.marginTarget), c.icon]]));
